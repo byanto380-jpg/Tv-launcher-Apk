@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TV Launcher</title>
+<style>
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{font-family:system-ui,Roboto,sans-serif;color:#fff;background:#0b1220 center/cover no-repeat;overflow:hidden}
+#shade{position:fixed;top:0;left:0;right:0;bottom:0;background:linear-gradient(180deg,rgba(0,0,0,.45),rgba(0,0,0,.7))}
+#app{position:relative;height:100%;padding:3vh 3.5vw;display:flex;flex-direction:column;gap:2.5vh}
+.top{display:flex;justify-content:space-between;align-items:flex-start}
+#clock{font-size:8vw;font-weight:200;line-height:1}
+#date{font-size:1.8vw;opacity:.8;margin-top:.8vh}
+#nowW{text-align:right;font-size:1.8vw}
+#nowW b{display:block;font-size:5vw;font-weight:300}
+.grid{flex:1;display:grid;grid-template-columns:1fr 1.2fr 1fr;gap:1.5vw;min-height:0}
+.card{background:rgba(14,22,38,.82);border-radius:1.4vw;padding:1.5vw;overflow:hidden}
+.card h2{font-size:1.5vw;font-weight:500;opacity:.75;margin-bottom:1.2vh;letter-spacing:.05em;text-transform:uppercase}
+.row{display:flex;justify-content:space-between;font-size:1.9vw;padding:.9vh 1vw;border-radius:.8vw}
+.row.next{background:#16a34a;font-weight:600}
+#cd{font-size:1.4vw;opacity:.85;margin-bottom:1vh}
+.match{padding:.9vh 0;border-bottom:1px solid rgba(255,255,255,.1);font-size:1.5vw}
+.match small{display:block;opacity:.65;font-size:1.15vw;margin-top:.3vh}
+.day{display:flex;justify-content:space-between;align-items:center;font-size:1.6vw;padding:.8vh 0}
+.day span:first-child{width:5vw;opacity:.8}
+.muted{opacity:.6;font-size:1.4vw}
+.bar{display:flex;gap:1.2vw;align-items:center}
+button,.btn{font:inherit;color:#fff;background:rgba(255,255,255,.14);border:0;border-radius:1vw;padding:1.3vh 1.8vw;font-size:1.6vw;cursor:pointer;text-decoration:none;display:inline-block}
+button:focus,.btn:focus,input:focus,select:focus{outline:.25vw solid #38bdf8;background:rgba(56,189,248,.3)}
+.sp{flex:1}
+#set{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(5,10,20,.92);display:none;padding:5vh 8vw;overflow:auto;z-index:5}
+#set.on{display:block}
+#set h1{font-size:2.6vw;font-weight:400;margin-bottom:3vh}
+.f{margin:2vh 0;font-size:1.6vw}
+.f label{display:block;opacity:.7;margin-bottom:.8vh}
+input,select{font:inherit;font-size:1.6vw;color:#fff;background:rgba(255,255,255,.1);border:0;border-radius:.8vw;padding:1.2vh 1vw;min-width:22vw}
+option{color:#000}
+#res button{display:block;margin:.5vh 0}
+#apps{overflow-x:auto;scrollbar-width:none;padding:.6vh .4vw}#apps>*{flex:none}#apps button img{width:3.2vw;height:3.2vw;vertical-align:middle;margin-right:.7vw;border-radius:.5vw}
+@media(max-width:800px){body{overflow:auto}#app{height:auto}.grid{grid-template-columns:1fr}#clock{font-size:18vw}#date,#nowW,.row,.match,.day,.card h2,#cd,button,.btn,.f,input,select,.muted{font-size:4.2vw}#nowW b{font-size:12vw}.match small{font-size:3.4vw}#set h1{font-size:7vw}}
+</style>
+</head>
+<body>
+<div id="shade"></div>
+<div id="app">
+  <div class="top">
+    <div><div id="clock">--:--</div><div id="date"></div></div>
+    <div id="nowW"></div>
+  </div>
+  <div class="grid">
+    <div class="card"><h2>🕌 Waktu Sholat</h2><div id="cd"></div><div id="pray"><div class="muted">Memuat…</div></div></div>
+    <div class="card"><h2>⚽ Jadwal Pertandingan</h2><div id="match"><div class="muted">Memuat…</div></div></div>
+    <div class="card"><h2>🌤️ Prakiraan Cuaca</h2><div id="wx"><div class="muted">Memuat…</div></div></div>
+  </div>
+  <div class="bar" id="apps"></div>
+</div>
+
+<div id="set">
+  <h1>Pengaturan</h1>
+  <div class="f"><label>Lokasi saat ini</label><b id="locName"></b></div>
+  <div class="f"><label>Cari kota (untuk waktu sholat, cuaca &amp; zona waktu)</label>
+    <input id="q" placeholder="mis. Surabaya"> <button id="go">Cari</button><div id="res"></div></div>
+  <div class="f"><label>Metode perhitungan sholat</label>
+    <select id="method"><option value="20">Kemenag RI (Indonesia)</option><option value="3">Muslim World League</option><option value="4">Umm al-Qura (Makkah)</option><option value="2">ISNA</option><option value="11">Singapura (MUIS)</option><option value="17">Malaysia (JAKIM)</option></select></div>
+  <div class="f"><label>Liga sepak bola</label>
+    <select id="league"><option value="4328">Premier League</option><option value="4335">La Liga</option><option value="4332">Serie A</option><option value="4331">Bundesliga</option><option value="4334">Ligue 1</option><option value="4790">Super League Indonesia (Liga 1)</option><option value="4480">Champions League</option></select></div>
+  <div class="f"><label>Wallpaper (pilih file foto dari perangkat)</label>
+    <input type="file" id="wp" accept="image/*"> <button id="wpReset">Kembalikan default</button></div>
+  <div class="f"><label>Adzan saat waktu sholat (pilih file audio sendiri; tanpa file = bunyi bip)</label>
+    <select id="adzan"><option value="1">Aktif</option><option value="0">Nonaktif</option></select> <input type="file" id="adzanFile" accept="audio/*"> <button id="adzanTest">Tes suara</button></div>
+  <div class="f"><label>Pintasan aplikasi (versi browser; di APK otomatis semua aplikasi terpasang) (satu per baris: Nama|URL)</label>
+    <textarea id="appsTxt" rows="5" style="width:60vw;font:inherit;font-size:1.4vw;color:#fff;background:rgba(255,255,255,.1);border:0;border-radius:.8vw;padding:1vh 1vw"></textarea></div>
+  <div class="f"><button id="save">Simpan &amp; Tutup</button></div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const DEF={name:'Jakarta',lat:-6.2146,lon:106.8451,tz:'Asia/Jakarta',method:'20',league:'4328',adzan:'1',
+ apps:'YouTube|https://www.youtube.com/tv\nNetflix|https://www.netflix.com\nVidio|https://www.vidio.com\nSpotify|https://open.spotify.com\nGoogle|https://www.google.com'};
+let S=Object.assign({},DEF);
+try{Object.assign(S,JSON.parse(localStorage.getItem('tvl')||'{}'))}catch(e){}
+const save=()=>{try{localStorage.setItem('tvl',JSON.stringify(S))}catch(e){}};
+const j=async u=>{const r=await fetch(u);if(!r.ok)throw 0;return r.json()};
+const cache=(k,v)=>{try{if(v===undefined)return JSON.parse(localStorage.getItem(k));localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
+
+/* Wallpaper */
+function setWP(){try{const w=localStorage.getItem('tvwp');document.body.style.backgroundImage=w?`url(${w})`:'radial-gradient(circle at 20% 20%,#1e3a5f,#0b1220 70%)'}catch(e){}}
+$('wp').onchange=e=>{const f=e.target.files[0];if(!f)return;const img=new Image();img.onload=()=>{
+  const s=Math.min(1,1920/img.width),c=document.createElement('canvas');c.width=img.width*s;c.height=img.height*s;
+  c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+  let d=c.toDataURL('image/jpeg',.85);
+  try{localStorage.setItem('tvwp',d)}catch(x){try{localStorage.setItem('tvwp',c.toDataURL('image/jpeg',.6))}catch(y){alert('Foto terlalu besar')}}
+  setWP()};img.src=URL.createObjectURL(f)};
+$('wpReset').onclick=()=>{try{localStorage.removeItem('tvwp')}catch(e){}setWP()};
+
+/* Jam */
+const parts=(d=new Date())=>{const o={};new Intl.DateTimeFormat('en-GB',{timeZone:S.tz,hour12:false,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}).formatToParts(d).forEach(p=>o[p.type]=p.value);o.hour=o.hour%24;return o};
+function tick(){const p=parts();checkAdzan(p);$('clock').textContent=`${String(p.hour).padStart(2,'0')}:${p.minute}`;
+  $('date').textContent=new Intl.DateTimeFormat('id-ID',{timeZone:S.tz,weekday:'long',day:'numeric',month:'long',year:'numeric'}).format(new Date())+' · '+S.name;
+  nextPrayer(p)}
+let T=null;const N={Fajr:'Subuh',Dhuhr:'Dzuhur',Asr:'Ashar',Maghrib:'Maghrib',Isha:'Isya'};
+/* Sholat */
+async function loadPray(){const p=parts(),key=`pray-${S.lat}-${S.lon}-${S.method}-${p.year}${p.month}${p.day}`;
+  T=cache(key);
+  if(!T){try{const r=await j(`https://api.aladhan.com/v1/timings/${p.day}-${p.month}-${p.year}?latitude=${S.lat}&longitude=${S.lon}&method=${S.method}&timezonestring=${encodeURIComponent(S.tz)}`);T=r.data.timings;cache(key,T)}catch(e){}}
+  renderPray()}
+function renderPray(){if(!T){$('pray').innerHTML='<div class="muted">Tidak dapat memuat (cek koneksi internet)</div>';return}
+  $('pray').innerHTML=Object.keys(N).map(k=>`<div class="row" id="p-${k}"><span>${N[k]}</span><span>${T[k].slice(0,5)}</span></div>`).join('')+`<div class="muted" style="margin-top:1vh">Terbit: ${T.Sunrise.slice(0,5)}</div>`;nextPrayer(parts())}
+function nextPrayer(p){if(!T)return;const now=p.hour*60+ +p.minute,ks=Object.keys(N);let nk=null,diff=0;
+  for(const k of ks){const[h,m]=T[k].split(':');const t=h*60+ +m;if(t>now){nk=k;diff=t*60-(now*60+ +p.second);break}}
+  if(!nk){nk='Fajr';const[h,m]=T.Fajr.split(':');diff=(24*60+h*60+ +m)*60-(now*60+ +p.second)}
+  ks.forEach(k=>{const e=$('p-'+k);if(e)e.classList.toggle('next',k===nk)});
+  const h=Math.floor(diff/3600),m=Math.floor(diff%3600/60);$('cd').textContent=`${N[nk]} dalam ${h?h+' jam ':''}${m} menit`}
+/* Cuaca */
+const WC=c=>c==0?['☀️','Cerah']:c<3?['🌤️','Cerah berawan']:c==3?['☁️','Berawan']:c<50?['🌫️','Berkabut']:c<60?['🌦️','Gerimis']:c<70?['🌧️','Hujan']:c<80?['❄️','Salju']:c<90?['🌧️','Hujan deras']:['⛈️','Badai petir'];
+async function loadWx(){let r=cache('wx-'+S.lat+S.lon);
+  try{r=await j(`https://api.open-meteo.com/v1/forecast?latitude=${S.lat}&longitude=${S.lon}&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=${encodeURIComponent(S.tz)}&forecast_days=5`);cache('wx-'+S.lat+S.lon,r)}catch(e){}
+  if(!r){$('wx').innerHTML='<div class="muted">Tidak dapat memuat</div>';return}
+  const c=WC(r.current.weather_code);$('nowW').innerHTML=`<b>${c[0]} ${Math.round(r.current.temperature_2m)}°</b>${c[1]}`;
+  $('wx').innerHTML=r.daily.time.map((d,i)=>{const w=WC(r.daily.weather_code[i]);
+    const n=i==0?'Hari ini':new Intl.DateTimeFormat('id-ID',{weekday:'short',timeZone:'UTC'}).format(new Date(d));
+    return `<div class="day"><span>${n}</span><span>${w[0]} ${r.daily.precipitation_probability_max[i]??0}%</span><span>${Math.round(r.daily.temperature_2m_max[i])}° / ${Math.round(r.daily.temperature_2m_min[i])}°</span></div>`}).join('')}
+/* Bola */
+async function loadMatch(){const k='mt-'+S.league;let r=cache(k);
+  try{r=await j(`https://www.thesportsdb.com/api/v1/json/3/eventsnextleague.php?id=${S.league}`);cache(k,r)}catch(e){}
+  const ev=r&&r.events;if(!ev||!ev.length){$('match').innerHTML='<div class="muted">Belum ada jadwal / tidak dapat memuat</div>';return}
+  $('match').innerHTML=ev.slice(0,6).map(e=>{const d=new Date(e.dateEvent+'T'+(e.strTime||'00:00:00')+(e.strTime?'Z':''));
+    const t=new Intl.DateTimeFormat('id-ID',{timeZone:S.tz,weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:false}).format(d);
+    return `<div class="match">${e.strHomeTeam} vs ${e.strAwayTeam}<small>${t}${e.strTime?'':' (jam belum pasti)'} · ${e.strLeague||''}</small></div>`}).join('')}
+/* Aplikasi */
+function renderApps(){let h='<button id="open">⚙️ Pengaturan</button>';
+  if(window.Android){h+='<button data-s="wifi">📶 WiFi</button><button data-s="display">🖥️ Layar &amp; HDMI</button><button data-s="sound">🔊 Suara</button>';try{JSON.parse(Android.getApps()).forEach(a=>{h+=`<button data-p="${a.p}"><img src="data:image/png;base64,${a.i}">${a.n}</button>`})}catch(e){}}
+  else h+=S.apps.split('\n').filter(l=>l.includes('|')).map(l=>{const[n,u]=l.split('|');return `<a class="btn" href="${u.trim()}">${n.trim()}</a>`}).join('');
+  $('apps').innerHTML=h;$('open').onclick=openSet;
+  document.querySelectorAll('#apps [data-p]').forEach(x=>x.onclick=()=>Android.launch(x.dataset.p));
+  document.querySelectorAll('#apps [data-s]').forEach(x=>x.onclick=()=>Android.openSys(x.dataset.s))}
+/* Pengaturan */
+function openSet(){$('locName').textContent=`${S.name} (${S.tz})`;$('method').value=S.method;$('league').value=S.league;$('adzan').value=S.adzan;$('appsTxt').value=S.apps;$('set').classList.add('on');$('q').focus()}
+$('go').onclick=async()=>{const q=$('q').value.trim();if(!q)return;$('res').innerHTML='Mencari…';
+  try{const r=await j(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=5&language=id`);
+    $('res').innerHTML='';(r.results||[]).forEach(c=>{const b=document.createElement('button');b.textContent=`${c.name}, ${c.admin1||''} ${c.country||''} · ${c.timezone}`;
+      b.onclick=()=>{S.name=c.name;S.lat=c.latitude;S.lon=c.longitude;S.tz=c.timezone;$('locName').textContent=`${c.name} (${c.timezone})`;$('res').innerHTML=''};$('res').appendChild(b)});
+    if(!r.results)$('res').textContent='Tidak ditemukan'}catch(e){$('res').textContent='Gagal mencari'}};
+$('q').onkeydown=e=>{if(e.key==='Enter')$('go').click()};
+$('save').onclick=()=>{S.method=$('method').value;S.league=$('league').value;S.adzan=$('adzan').value;S.apps=$('appsTxt').value;save();$('set').classList.remove('on');init()};
+document.onkeydown=e=>{if(e.key==='Escape'||e.key==='Backspace'&&!/INPUT|TEXTAREA/.test(document.activeElement.tagName))$('set').classList.remove('on')};
+/* Navigasi remote: panah kiri/kanan antar tombol */
+document.addEventListener('keydown',e=>{const f=[...document.querySelectorAll(($('set').classList.contains('on')?'#set':'#apps')+' button,'+($('set').classList.contains('on')?'#set':'#apps')+' a,'+($('set').classList.contains('on')?'#set':'#apps')+' input,'+($('set').classList.contains('on')?'#set':'#apps')+' select')],i=f.indexOf(document.activeElement);
+  if(e.key==='ArrowRight'||e.key==='ArrowDown'){if(!(e.target.tagName==='SELECT'))f[Math.min(i+1,f.length-1)]?.focus()}
+  if(e.key==='ArrowLeft'||e.key==='ArrowUp'){if(!(e.target.tagName==='SELECT'))f[Math.max(i-1,0)]?.focus()}});
+
+/* Adzan */
+const idb=()=>new Promise((ok,no)=>{const r=indexedDB.open('tvl',1);r.onupgradeneeded=()=>r.result.createObjectStore('f');r.onsuccess=()=>ok(r.result);r.onerror=no});
+const idbSet=async v=>{const d=await idb();d.transaction('f','readwrite').objectStore('f').put(v,'adzan')};
+const idbGet=async()=>{try{const d=await idb();return await new Promise(ok=>{const q=d.transaction('f').objectStore('f').get('adzan');q.onsuccess=()=>ok(q.result);q.onerror=()=>ok(null)})}catch(e){return null}};
+function beep(){try{const c=new AudioContext();[0,.6,1.2].forEach(t=>{const o=c.createOscillator();o.connect(c.destination);o.frequency.value=660;o.start(c.currentTime+t);o.stop(c.currentTime+t+.4)})}catch(e){}}
+async function playAdzan(){try{const b=await idbGet();const a=new Audio(b?URL.createObjectURL(b):'adzan.mp3');await a.play();return}catch(e){}beep()}
+$('adzanFile').onchange=async e=>{const f=e.target.files[0];if(f){try{await idbSet(f);alert('Audio adzan tersimpan')}catch(x){alert('Gagal menyimpan')}}};
+$('adzanTest').onclick=playAdzan;
+let lastAd='';
+function checkAdzan(p){if(!T||S.adzan==='0')return;const hm=`${String(p.hour).padStart(2,'0')}:${p.minute}`;
+  for(const k of Object.keys(N)){const key=p.day+k;if(T[k].slice(0,5)===hm&&lastAd!==key){lastAd=key;playAdzan()}}}
+/* Layar penuh otomatis (browser) */
+['click','keydown'].forEach(ev=>document.addEventListener(ev,()=>{if(!window.Android&&!document.fullscreenElement)document.documentElement.requestFullscreen?.().catch(()=>{})},{once:true}));
+function init(){setWP();renderApps();loadPray();loadWx();loadMatch();tick()}
+init();setInterval(tick,1000);
+setInterval(()=>{loadPray();loadWx();loadMatch()},30*60*1000);
+if(!cache('tvl-first')){cache('tvl-first',1)}
+setTimeout(()=>{const a=document.querySelector('#apps [data-p],#apps a');a&&a.focus()},300);
+</script>
+</body>
+</html>

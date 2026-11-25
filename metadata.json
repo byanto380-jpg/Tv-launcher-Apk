@@ -1,0 +1,8 @@
+{
+  "name": "Remix TV Launcher",
+  "description": "Android TV Box launcher dengan navigasi remote control D-pad, waktu sholat, jadwal bola, prakiraan cuaca, dan generator proyek APK.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

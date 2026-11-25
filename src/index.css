@@ -1,0 +1,145 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --tv-focus-hex: #38bdf8;
+  --tv-focus-rgb: 56, 189, 248;
+  --tv-focus-input-bg: rgba(30, 58, 95, 0.55);
+}
+
+[data-tv-theme="dawn"] {
+  --tv-focus-hex: #fb923c;
+  --tv-focus-rgb: 251, 146, 60;
+  --tv-focus-input-bg: rgba(124, 45, 18, 0.45);
+}
+
+[data-tv-theme="day"] {
+  --tv-focus-hex: #38bdf8;
+  --tv-focus-rgb: 56, 189, 248;
+  --tv-focus-input-bg: rgba(30, 58, 95, 0.55);
+}
+
+[data-tv-theme="night"] {
+  --tv-focus-hex: #a78bfa;
+  --tv-focus-rgb: 167, 139, 250;
+  --tv-focus-input-bg: rgba(76, 29, 149, 0.45);
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+    font-family: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+  }
+
+  .font-mono-tabular {
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* 10-Foot Android TV Remote Control Focus Styling */
+[data-focusable="true"] {
+  transition:
+    transform 160ms cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 160ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 160ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 160ms cubic-bezier(0.16, 1, 0.3, 1);
+  outline: none;
+}
+
+@keyframes tv-focus-outer-glow {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 6px rgba(var(--tv-focus-rgb), 0.2),
+      0 0 18px 2px rgba(var(--tv-focus-rgb), 0.24),
+      0 12px 28px -8px rgba(0, 0, 0, 0.65);
+  }
+  50% {
+    box-shadow:
+      0 0 0 9px rgba(var(--tv-focus-rgb), 0.36),
+      0 0 30px 6px rgba(var(--tv-focus-rgb), 0.44),
+      0 12px 28px -8px rgba(0, 0, 0, 0.65);
+  }
+}
+
+[data-focusable="true"]:focus {
+  outline: 3px solid var(--tv-focus-hex);
+  outline-offset: 2px;
+  transform: scale(1.03);
+  box-shadow:
+    0 0 0 6px rgba(var(--tv-focus-rgb), 0.2),
+    0 12px 28px -8px rgba(0, 0, 0, 0.65);
+  animation: tv-focus-outer-glow 2.4s ease-in-out 3s infinite;
+  z-index: 10;
+}
+
+/* Inputs & selects inside settings get clear TV focus without excessive scaling */
+input[data-focusable="true"]:focus,
+select[data-focusable="true"]:focus,
+textarea[data-focusable="true"]:focus {
+  transform: scale(1.01);
+  border-color: var(--tv-focus-hex);
+  background-color: var(--tv-focus-input-bg);
+}
+
+/* Smooth TV Launcher Fade-In on Theme Change or Modal Close */
+@keyframes tv-launcher-fade-in {
+  0% {
+    opacity: 0.72;
+    transform: scale(0.992);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.tv-fade-in-reveal {
+  animation: tv-launcher-fade-in 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Screen Saver Ambient Photo Ken Burns Drift (compositor-only) */
+@keyframes tv-ken-burns {
+  0% {
+    transform: scale(1) translate3d(0, 0, 0);
+  }
+  100% {
+    transform: scale(1.07) translate3d(-1.2%, -0.8%, 0);
+  }
+}
+
+.tv-ken-burns {
+  animation: tv-ken-burns 14s ease-out forwards;
+}
+
+/* Hide scrollbars on TV horizontal rails while preserving programmatic scroll */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-focusable="true"] {
+    transition: none;
+  }
+  [data-focusable="true"]:focus {
+    transform: none;
+    animation: none;
+  }
+  .tv-fade-in-reveal {
+    animation: none;
+  }
+  .tv-ken-burns {
+    animation: none;
+  }
+}
