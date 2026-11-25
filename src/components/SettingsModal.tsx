@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
+  BellOff,
   Check,
   Film,
   Image as ImageIcon,
@@ -18,20 +19,25 @@ import {
 import { useDpadNavigation } from '../hooks/useDpadNavigation';
 import { useModalTransition } from '../hooks/useModalTransition';
 import {
+  AUTO_SILENT_DURATION_OPTIONS,
   DPAD_SPEED_OPTIONS,
   FOOTBALL_LEAGUES,
+  LIVE_WALLPAPER_FILTERS,
   LIVE_WALLPAPER_THEMES,
   PRAYER_METHODS,
   THEME_MODE_OPTIONS,
+  normalizeDashboardCards,
   playAdzanSound,
   saveAdzanAudio,
   searchCities,
 } from '../services/launcherApis';
+import { DashboardLayoutGrid } from './DashboardLayoutGrid';
 import type {
   AndroidAppItem,
   DpadSpeed,
   GeoCityResult,
   LauncherSettings,
+  LiveWallpaperFilter,
   LiveWallpaperTheme,
   TimeThemeMode,
 } from '../types/launcher';
@@ -70,14 +76,39 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [cityResults, setCityResults] = useState<GeoCityResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [dndAccessGranted, setDndAccessGranted] = useState<boolean | null>(null);
 
   React.useEffect(() => {
     if (isOpen) {
       setDraft(settings);
       setCityResults([]);
       setSearchError(null);
+      if (isAndroidEnv && window.Android?.hasDndAccess) {
+        try {
+          setDndAccessGranted(Boolean(window.Android.hasDndAccess()));
+        } catch {
+          setDndAccessGranted(null);
+        }
+      } else {
+        setDndAccessGranted(null);
+      }
     }
-  }, [isOpen, settings]);
+  }, [isOpen, settings, isAndroidEnv]);
+
+  React.useEffect(() => {
+    if (!isOpen || !isAndroidEnv) return;
+    const onFocus = () => {
+      if (window.Android?.hasDndAccess) {
+        try {
+          setDndAccessGranted(Boolean(window.Android.hasDndAccess()));
+        } catch {
+          // ignore
+        }
+      }
+    };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [isOpen, isAndroidEnv]);
 
   useDpadNavigation({
     scopeSelector: '#settings-modal',
@@ -354,6 +385,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           </section>
 
+          {/* Tata Letak & Urutan Kartu Dashboard */}
+          <DashboardLayoutGrid
+            cards={normalizeDashboardCards(draft.dashboardCards)}
+            soundNav={draft.soundNav === '1'}
+            onChange={(nextCards) =>
+              setDraft((prev) => ({ ...prev, dashboardCards: nextCards }))
+            }
+            onToast={onToast}
+          />
+
           {/* Tema Warna Otomatis (Fajar / Siang / Malam) */}
           <section className="space-y-2 border-b border-slate-800/80 pb-6">
             <label htmlFor="theme-mode" className="flex items-center gap-2 text-sm font-medium text-slate-300">
@@ -415,36 +456,80 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
 
             {draft.liveWallpaper === '1' && (
-              <div className="flex flex-wrap items-center gap-3 pt-1">
-                <select
-                  aria-label="Tema video live wallpaper"
-                  data-focusable="true"
-                  value={draft.liveWallpaperTheme}
-                  onChange={(e) =>
-                    setDraft((prev) => ({
-                      ...prev,
-                      liveWallpaperTheme: e.target.value as LiveWallpaperTheme,
-                    }))
-                  }
-                  className="min-w-[260px] flex-1 rounded-xl border border-slate-700 bg-slate-800/90 px-4 py-2.5 text-sm text-slate-100"
-                >
-                  {LIVE_WALLPAPER_THEMES.map((t) => (
-                    <option key={t.value} value={t.value} className="bg-slate-900 text-slate-100">
-                      {t.label}
-                    </option>
-                  ))}
-                </select>
-                {onNextLiveWallpaper && settings.liveWallpaper === '1' && (
-                  <button
-                    type="button"
+              <div className="space-y-3 pt-1">
+                <div className="flex flex-wrap items-center gap-3">
+                  <select
+                    aria-label="Tema video live wallpaper"
                     data-focusable="true"
-                    onClick={onNextLiveWallpaper}
-                    className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm font-medium text-slate-200 hover:bg-slate-700 whitespace-nowrap shrink-0"
+                    value={draft.liveWallpaperTheme}
+                    onChange={(e) =>
+                      setDraft((prev) => ({
+                        ...prev,
+                        liveWallpaperTheme: e.target.value as LiveWallpaperTheme,
+                      }))
+                    }
+                    className="min-w-[260px] flex-1 rounded-xl border border-slate-700 bg-slate-800/90 px-4 py-2.5 text-sm text-slate-100"
                   >
-                    <RefreshCw className="h-4 w-4 text-sky-300" />
-                    <span>Ganti Klip</span>
-                  </button>
-                )}
+                    {LIVE_WALLPAPER_THEMES.map((t) => (
+                      <option key={t.value} value={t.value} className="bg-slate-900 text-slate-100">
+                        {t.label}
+                      </option>
+                    ))}
+                  </select>
+                  {onNextLiveWallpaper && settings.liveWallpaper === '1' && (
+                    <button
+                      type="button"
+                      data-focusable="true"
+                      onClick={onNextLiveWallpaper}
+                      className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm font-medium text-slate-200 hover:bg-slate-700 whitespace-nowrap shrink-0"
+                    >
+                      <RefreshCw className="h-4 w-4 text-sky-300" />
+                      <span>Ganti Klip</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="space-y-1.5">
+                  <span className="block text-xs font-medium text-slate-300">
+                    Filter Suasana Ruangan (Live Wallpaper)
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    {LIVE_WALLPAPER_FILTERS.map((flt) => {
+                      const active = (draft.liveWallpaperFilter || 'none') === flt.value;
+                      return (
+                        <button
+                          key={flt.value}
+                          type="button"
+                          data-focusable="true"
+                          aria-pressed={active}
+                          onClick={() =>
+                            setDraft((prev) => ({
+                              ...prev,
+                              liveWallpaperFilter: flt.value as LiveWallpaperFilter,
+                            }))
+                          }
+                          className={`flex items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-medium whitespace-nowrap ${
+                            active
+                              ? 'border-sky-400 bg-sky-500/20 text-sky-100'
+                              : 'border-slate-700 bg-slate-800/90 text-slate-300 hover:bg-slate-800'
+                          }`}
+                        >
+                          <span
+                            aria-hidden="true"
+                            className={`h-3 w-3 rounded-sm border border-white/25 ${
+                              flt.value === 'monochrome'
+                                ? 'bg-gradient-to-br from-slate-100 to-slate-700'
+                                : flt.value === 'sepia'
+                                ? 'bg-gradient-to-br from-amber-200 to-amber-800'
+                                : 'bg-gradient-to-br from-sky-400 to-emerald-500'
+                            }`}
+                          />
+                          <span>{flt.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             )}
 
@@ -638,6 +723,84 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <Volume2 className="h-4 w-4" />
                 <span>Tes Suara</span>
               </button>
+            </div>
+          </section>
+
+          {/* Auto-Silent (Do Not Disturb Saat Sholat) */}
+          <section className="space-y-3 border-b border-slate-800/80 pb-6">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <label className="flex items-center gap-2 text-sm font-medium text-slate-300">
+                  <BellOff className="h-4 w-4 text-violet-300" />
+                  <span>Auto-Silent (Mode Hening Otomatis Saat Sholat)</span>
+                </label>
+                <p className="mt-0.5 text-xs text-slate-400">
+                  Mengaktifkan mode Jangan Ganggu (Do Not Disturb) pada perangkat Android TV Box otomatis saat waktu sholat tiba dan menonaktifkannya kembali setelah durasi selesai
+                </p>
+              </div>
+              <button
+                type="button"
+                data-focusable="true"
+                onClick={() =>
+                  setDraft((prev) => ({
+                    ...prev,
+                    autoSilent: prev.autoSilent === '1' ? '0' : '1',
+                  }))
+                }
+                className={`rounded-xl border px-4 py-2 text-sm font-semibold whitespace-nowrap shrink-0 ${
+                  draft.autoSilent === '1'
+                    ? 'border-violet-400 bg-violet-500/25 text-violet-100'
+                    : 'border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700'
+                }`}
+              >
+                {draft.autoSilent === '1' ? 'Aktif' : 'Nonaktif'}
+              </button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              <div className="flex items-center gap-2">
+                <label htmlFor="auto-silent-duration" className="text-xs font-medium text-slate-300">
+                  Durasi Mode Hening:
+                </label>
+                <select
+                  id="auto-silent-duration"
+                  data-focusable="true"
+                  value={draft.autoSilentDurationMin}
+                  onChange={(e) =>
+                    setDraft((prev) => ({
+                      ...prev,
+                      autoSilentDurationMin: Number(e.target.value) || 15,
+                    }))
+                  }
+                  className="rounded-xl border border-slate-700 bg-slate-800/90 px-3.5 py-2 text-sm text-slate-100"
+                >
+                  {AUTO_SILENT_DURATION_OPTIONS.map((mins) => (
+                    <option key={mins} value={mins} className="bg-slate-900 text-slate-100">
+                      {mins} menit
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {isAndroidEnv && (
+                <button
+                  type="button"
+                  data-focusable="true"
+                  onClick={() => {
+                    window.Android?.requestDndPermission?.();
+                    onToast('Membuka pengaturan izin Jangan Ganggu (DND) Android TV');
+                  }}
+                  className={`rounded-xl border px-3.5 py-2 text-xs font-medium whitespace-nowrap shrink-0 ${
+                    dndAccessGranted
+                      ? 'border-emerald-400/50 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25'
+                      : 'border-amber-400/60 bg-amber-500/15 text-amber-100 hover:bg-amber-500/25'
+                  }`}
+                >
+                  {dndAccessGranted
+                    ? 'Izin DND TV Box Aktif'
+                    : 'Beri Izin DND Android TV'}
+                </button>
+              )}
             </div>
           </section>
 

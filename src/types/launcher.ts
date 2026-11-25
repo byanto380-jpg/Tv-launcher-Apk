@@ -1,4 +1,5 @@
 export type LiveWallpaperTheme = 'clouds' | 'ocean' | 'aurora' | 'cosmos';
+export type LiveWallpaperFilter = 'none' | 'monochrome' | 'sepia';
 
 export type TimeThemePhase = 'dawn' | 'day' | 'night';
 export type TimeThemeMode = 'auto' | TimeThemePhase;
@@ -20,6 +21,13 @@ export interface ScreenSaverPhoto {
   source: string;
 }
 
+export type DashboardCardId = 'prayer' | 'schedule' | 'weather';
+
+export interface DashboardCardConfig {
+  id: DashboardCardId;
+  visible: boolean;
+}
+
 export interface LauncherSettings {
   name: string;
   lat: number;
@@ -32,10 +40,37 @@ export interface LauncherSettings {
   soundNav: '1' | '0';
   dpadSpeed: DpadSpeed;
   favoriteApps: string[];
+  favoriteTvChannels: string[];
   liveWallpaper: '1' | '0';
   liveWallpaperTheme: LiveWallpaperTheme;
+  liveWallpaperFilter: LiveWallpaperFilter;
   themeMode: TimeThemeMode;
   screenSaver: '1' | '0';
+  autoSilent: '1' | '0';
+  autoSilentDurationMin: number;
+  dashboardCards: DashboardCardConfig[];
+}
+
+export interface TvChannelInfo {
+  id: string;
+  name: string;
+}
+
+export interface TvProgramItem {
+  time: string;
+  timeLabel: string;
+  title: string;
+}
+
+export interface TvChannelSchedule {
+  id: string;
+  name: string;
+  programs: TvProgramItem[];
+}
+
+export interface TvScheduleResponse {
+  updatedAt: string;
+  channels: TvChannelSchedule[];
 }
 
 export interface PrayerTimings {
@@ -114,6 +149,34 @@ export interface WeatherWarning {
   affectedDays: number[];
 }
 
+export interface EmergencyBroadcast {
+  headline: string;
+  tickerText: string;
+  advice: string;
+  model: string;
+  cityName: string;
+  warningTitle: string;
+  generatedAt: string;
+  isSimulated?: boolean;
+}
+
+export type HaramainCityId = 'makkah' | 'madinah';
+
+export interface HaramainChannelStream {
+  id: HaramainCityId;
+  city: string;
+  mosque: string;
+  channelName: string;
+  arabicTitle: string;
+  description: string;
+  hlsUrl: string;
+  youtubeChannelId: string;
+  youtubeEmbedUrl: string;
+  lat: number;
+  lon: number;
+  tz: string;
+}
+
 export interface FootballMatch {
   idEvent?: string;
   strHomeTeam: string;
@@ -158,6 +221,9 @@ export interface AndroidBridge {
   openSys: (target: 'wifi' | 'display' | 'sound' | 'all') => void;
   getDeviceInfo?: () => string;
   powerAction?: (action: PowerAction) => void;
+  setDnd?: (enabled: boolean) => boolean;
+  hasDndAccess?: () => boolean;
+  requestDndPermission?: () => void;
 }
 
 declare global {

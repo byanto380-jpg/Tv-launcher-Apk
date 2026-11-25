@@ -1,7 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AnimatePresence, MotionConfig, motion } from 'motion/react';
 import {
   AlertTriangle,
   BarChart3,
+  BellOff,
+  Bot,
   Calendar,
   Cloud,
   CloudDrizzle,
@@ -9,12 +12,17 @@ import {
   CloudLightning,
   CloudRain,
   CloudSun,
+  Gamepad2,
+  LayoutGrid,
+  MapPin,
   Maximize2,
   Monitor,
   Moon,
+  Music,
   Package,
   Power,
   QrCode,
+  Radio,
   RefreshCw,
   RotateCcw,
   Search,
@@ -30,8 +38,15 @@ import {
 } from 'lucide-react';
 import { ApkBuilderModal } from './components/ApkBuilderModal';
 import { AudioVisualizer } from './components/AudioVisualizer';
+import { ConnectionStatusBadge } from './components/ConnectionStatusBadge';
+import { EmergencyBroadcastTicker } from './components/EmergencyBroadcastTicker';
+import { GeminiChatModal } from './components/GeminiChatModal';
+import { HaramainLiveModal } from './components/HaramainLiveModal';
+import { MapsModal } from './components/MapsModal';
 import { MobileSyncView } from './components/MobileSyncView';
+import { MusicStudioModal } from './components/MusicStudioModal';
 import { NewsTicker } from './components/NewsTicker';
+import { OrbitSentinelGame } from './components/OrbitSentinelGame';
 import { PowerMenuModal } from './components/PowerMenuModal';
 import { QrSyncModal } from './components/QrSyncModal';
 import { ScreenSaverOverlay } from './components/ScreenSaverOverlay';
@@ -41,20 +56,24 @@ import { WeeklyPrayerModal } from './components/WeeklyPrayerModal';
 import { useDpadNavigation } from './hooks/useDpadNavigation';
 import {
   FOOTBALL_LEAGUES,
+  INDONESIAN_TV_CHANNELS,
   PRAYER_KEYS,
   PRAYER_LABELS,
   SCREEN_SAVER_IDLE_MS,
   TIME_THEME_PALETTES,
   evaluateWeatherWarning,
   fetchAmbientVideoLoops,
+  fetchEmergencyBroadcast,
   fetchFootballMatches,
   fetchPrayerSchedule,
+  fetchTvSchedules,
   fetchWeather,
   getDayWeatherWarning,
   getFallbackHijriDate,
   getTimeParts,
   getWeatherDescription,
   loadSettings,
+  normalizeDashboardCards,
   playAdzanSound,
   resolveTimeTheme,
   saveSettings,
@@ -62,13 +81,17 @@ import {
 import type {
   AndroidAppItem,
   DailyPrayerEntry,
+  EmergencyBroadcast,
   FootballMatch,
+  HaramainCityId,
   HijriDateInfo,
   LauncherSettings,
   LiveWallpaperItem,
   PowerAction,
   PrayerTimings,
+  TvChannelSchedule,
   WeatherData,
+  WeatherWarning,
 } from './types/launcher';
 
 function WeatherIcon({
@@ -125,9 +148,23 @@ export default function App() {
 
   const [matches, setMatches] = useState<FootballMatch[]>([]);
   const [matchesLoading, setMatchesLoading] = useState(true);
+  const [card2Tab, setCard2Tab] = useState<'matches' | 'tv'>('matches');
+  const [tvChannels, setTvChannels] = useState<TvChannelSchedule[]>([]);
+  const [tvLoading, setTvLoading] = useState(true);
+  const [selectedTvChannelId, setSelectedTvChannelId] = useState<string>('all');
+  const [tvChannelPickerOpen, setTvChannelPickerOpen] = useState(false);
+  const tvListScrollRef = useRef<HTMLDivElement | null>(null);
 
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(true);
+  const [weatherRevision, setWeatherRevision] = useState(0);
+  const [simulatedExtremeActive, setSimulatedExtremeActive] = useState(false);
+  const [emergencyBroadcast, setEmergencyBroadcast] = useState<EmergencyBroadcast | null>(null);
+  const [broadcastLoading, setBroadcastLoading] = useState(false);
+  const [broadcastError, setBroadcastError] = useState<string | null>(null);
+  const [broadcastDismissedKey, setBroadcastDismissedKey] = useState<string | null>(null);
+  const [customChatBroadcast, setCustomChatBroadcast] = useState<EmergencyBroadcast | null>(null);
+  const broadcastCacheRef = React.useRef<Map<string, EmergencyBroadcast>>(new Map());
 
   const [androidApps, setAndroidApps] = useState<AndroidAppItem[]>([]);
   const [isAndroidEnv, setIsAndroidEnv] = useState<boolean>(() => Boolean(window.Android));
@@ -137,6 +174,13 @@ export default function App() {
   const [weeklyModalOpen, setWeeklyModalOpen] = useState(false);
   const [powerMenuOpen, setPowerMenuOpen] = useState(false);
   const [qrSyncOpen, setQrSyncOpen] = useState(false);
+  const [mapsOpen, setMapsOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [musicOpen, setMusicOpen] = useState(false);
+  const [gameOpen, setGameOpen] = useState(false);
+  const [haramainOpen, setHaramainOpen] = useState(false);
+  const [haramainInitialCity, setHaramainInitialCity] = useState<HaramainCityId>('makkah');
+  const [gmpQuotaExceeded, setGmpQuotaExceeded] = useState(false);
   const [mobileSyncSession, setMobileSyncSession] = useState<{
     code: string;
     token: string;
@@ -160,9 +204,19 @@ export default function App() {
   const [liveVideoIdx, setLiveVideoIdx] = useState(0);
   const [liveVideoReady, setLiveVideoReady] = useState(false);
   const [launcherFadeIn, setLauncherFadeIn] = useState(false);
+  const [initialCardsStaggerDone, setInitialCardsStaggerDone] = useState(false);
   const [screenSaverActive, setScreenSaverActive] = useState(false);
+  const [dndSession, setDndSession] = useState<{
+    silentId: string;
+    prayerLabel: string;
+    endsAtMs: number;
+    isTest?: boolean;
+  } | null>(null);
+  const [dndBridgeGranted, setDndBridgeGranted] = useState<boolean | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const lastAdzanRef = React.useRef<string>('');
+  const lastSilentRef = React.useRef<string>('');
+  const dismissedSilentIdRef = React.useRef<string>('');
   const powerTimerRef = React.useRef<number | null>(null);
   const liveVideoRef = React.useRef<HTMLVideoElement | null>(null);
   const fadeTimerRef = React.useRef<number | null>(null);
@@ -177,11 +231,95 @@ export default function App() {
     setToast(msg);
   }, []);
 
+  const refreshDndPermission = useCallback(() => {
+    if (window.Android?.hasDndAccess) {
+      try {
+        setDndBridgeGranted(Boolean(window.Android.hasDndAccess()));
+      } catch {
+        setDndBridgeGranted(null);
+      }
+    } else {
+      setDndBridgeGranted(null);
+    }
+  }, []);
+
+  const activateDndSession = useCallback(
+    (
+      silentId: string,
+      prayerLabel: string,
+      durationMs: number,
+      isTest = false
+    ) => {
+      const endsAtMs = Date.now() + Math.max(1000, durationMs);
+      setDndSession({ silentId, prayerLabel, endsAtMs, isTest });
+
+      let nativeApplied = false;
+      let missingPermission = false;
+      if (window.Android?.setDnd) {
+        try {
+          const hasAccess = window.Android.hasDndAccess
+            ? window.Android.hasDndAccess()
+            : true;
+          setDndBridgeGranted(hasAccess);
+          if (hasAccess) {
+            nativeApplied = Boolean(window.Android.setDnd(true));
+          } else {
+            missingPermission = true;
+          }
+        } catch {
+          // ignore native bridge error
+        }
+      }
+
+      const mins = Math.max(1, Math.round(durationMs / 60000));
+      if (missingPermission) {
+        showToast(
+          `Auto-Silent aktif di launcher (${prayerLabel}). Beri izin DND Android TV agar notifikasi sistem ikut hening.`
+        );
+      } else if (nativeApplied) {
+        showToast(
+          `Mode Hening (DND) Android TV aktif ${mins} menit untuk waktu ${prayerLabel}`
+        );
+      } else {
+        showToast(`Auto-Silent aktif ${mins} menit (${prayerLabel})`);
+      }
+    },
+    [showToast]
+  );
+
+  const deactivateDndSession = useCallback(
+    (options?: { markDismissed?: boolean; toastMessage?: string }) => {
+      setDndSession((prev) => {
+        if (options?.markDismissed && prev && !prev.isTest) {
+          dismissedSilentIdRef.current = prev.silentId;
+        }
+        return null;
+      });
+      if (window.Android?.setDnd) {
+        try {
+          window.Android.setDnd(false);
+        } catch {
+          // ignore
+        }
+      }
+      if (options?.toastMessage) {
+        showToast(options.toastMessage);
+      }
+    },
+    [showToast]
+  );
+
   useEffect(() => {
     if (!toast) return;
     const t = window.setTimeout(() => setToast(null), 3200);
     return () => window.clearTimeout(t);
   }, [toast]);
+
+  useEffect(() => {
+    const handleGmpQuota = () => setGmpQuotaExceeded(true);
+    window.addEventListener('gmp-quota-exceeded', handleGmpQuota);
+    return () => window.removeEventListener('gmp-quota-exceeded', handleGmpQuota);
+  }, []);
 
   const refreshWallpaper = useCallback(() => {
     try {
@@ -194,6 +332,7 @@ export default function App() {
   const loadAndroidApps = useCallback(() => {
     if (window.Android) {
       setIsAndroidEnv(true);
+      refreshDndPermission();
       try {
         const parsed = JSON.parse(window.Android.getApps()) as AndroidAppItem[];
         setAndroidApps(Array.isArray(parsed) ? parsed : []);
@@ -202,19 +341,27 @@ export default function App() {
       }
     } else {
       setIsAndroidEnv(false);
+      setDndBridgeGranted(null);
       setAndroidApps([]);
     }
-  }, []);
+  }, [refreshDndPermission]);
 
   const loadAllData = useCallback(async (cfg: LauncherSettings) => {
     setPrayerLoading(true);
     setMatchesLoading(true);
     setWeatherLoading(true);
+    setTvLoading(true);
 
-    const [prayRes, matchRes, wxRes] = await Promise.all([
+    const favChannels =
+      cfg.favoriteTvChannels && cfg.favoriteTvChannels.length > 0
+        ? cfg.favoriteTvChannels
+        : ['rcti', 'sctv', 'indosiar', 'trans7', 'transtv'];
+
+    const [prayRes, matchRes, wxRes, tvRes] = await Promise.all([
       fetchPrayerSchedule(cfg),
       fetchFootballMatches(cfg.league),
       fetchWeather(cfg),
+      fetchTvSchedules(favChannels),
     ]);
 
     setPrayerTimes(prayRes.todayTimings);
@@ -226,8 +373,137 @@ export default function App() {
     setMatchesLoading(false);
 
     setWeather(wxRes);
+    setWeatherRevision((prev) => prev + 1);
     setWeatherLoading(false);
+
+    setTvChannels(tvRes.channels || []);
+    setTvLoading(false);
   }, []);
+
+  const toggleFavoriteTvChannel = useCallback(
+    (channelId: string, channelName: string) => {
+      setSettings((prev) => {
+        const current = prev.favoriteTvChannels || [];
+        const exists = current.includes(channelId);
+        if (exists && current.length <= 1) {
+          showToast('Minimal 1 channel favorit harus dipilih');
+          return prev;
+        }
+        const nextFavs = exists
+          ? current.filter((c) => c !== channelId)
+          : [...current, channelId];
+        const next = { ...prev, favoriteTvChannels: nextFavs };
+        saveSettings(next);
+        if (exists && selectedTvChannelId === channelId) {
+          setSelectedTvChannelId('all');
+        }
+        showToast(
+          exists
+            ? `${channelName} dihapus dari Channel Favorit`
+            : `${channelName} ditambahkan ke Channel Favorit`
+        );
+        return next;
+      });
+    },
+    [selectedTvChannelId, showToast]
+  );
+
+  const displayedTvPrograms = useMemo(() => {
+    const wibParts = getTimeParts('Asia/Jakarta', now);
+    const nowMin = wibParts.hour * 60 + Number(wibParts.minute);
+
+    const toMinutes = (hhmm: string) => {
+      const [h, m] = hhmm.split(':').map(Number);
+      return (Number.isFinite(h) ? h : 0) * 60 + (Number.isFinite(m) ? m : 0);
+    };
+
+    if (selectedTvChannelId !== 'all') {
+      const ch = tvChannels.find((c) => c.id === selectedTvChannelId);
+      if (!ch || ch.programs.length === 0) return [];
+      const annotated = ch.programs.map((prog, idx) => {
+        const startMin = toMinutes(prog.time);
+        const nextProg = ch.programs[idx + 1];
+        const endMin = nextProg ? toMinutes(nextProg.time) : 24 * 60;
+        const isLive = startMin <= nowMin && nowMin < endMin;
+        const isUpcoming = startMin > nowMin;
+        return {
+          ...prog,
+          channelId: ch.id,
+          channelName: ch.name,
+          startMin,
+          isLive,
+          isUpcoming,
+        };
+      });
+      const currentAndNext = annotated.filter((p) => p.isLive || p.isUpcoming);
+      return (currentAndNext.length > 0 ? currentAndNext : annotated).slice(0, 10);
+    }
+
+    // Combined "Semua Favorit" view: highlight live + next show per favorite channel
+    const combined: Array<{
+      channelId: string;
+      channelName: string;
+      time: string;
+      timeLabel: string;
+      title: string;
+      startMin: number;
+      isLive: boolean;
+      isUpcoming: boolean;
+    }> = [];
+
+    for (const ch of tvChannels) {
+      if (!ch.programs || ch.programs.length === 0) continue;
+      let liveIdx = -1;
+      for (let i = 0; i < ch.programs.length; i++) {
+        const start = toMinutes(ch.programs[i].time);
+        const nextStart = ch.programs[i + 1] ? toMinutes(ch.programs[i + 1].time) : 24 * 60;
+        if (start <= nowMin && nowMin < nextStart) {
+          liveIdx = i;
+          break;
+        }
+      }
+      if (liveIdx !== -1) {
+        const liveProg = ch.programs[liveIdx];
+        combined.push({
+          ...liveProg,
+          channelId: ch.id,
+          channelName: ch.name,
+          startMin: toMinutes(liveProg.time),
+          isLive: true,
+          isUpcoming: false,
+        });
+        const nextProg = ch.programs[liveIdx + 1];
+        if (nextProg) {
+          combined.push({
+            ...nextProg,
+            channelId: ch.id,
+            channelName: ch.name,
+            startMin: toMinutes(nextProg.time),
+            isLive: false,
+            isUpcoming: true,
+          });
+        }
+      } else {
+        const firstUpcoming = ch.programs.find((p) => toMinutes(p.time) > nowMin) || ch.programs[0];
+        if (firstUpcoming) {
+          combined.push({
+            ...firstUpcoming,
+            channelId: ch.id,
+            channelName: ch.name,
+            startMin: toMinutes(firstUpcoming.time),
+            isLive: false,
+            isUpcoming: toMinutes(firstUpcoming.time) > nowMin,
+          });
+        }
+      }
+    }
+
+    combined.sort((a, b) => {
+      if (a.isLive !== b.isLive) return a.isLive ? -1 : 1;
+      return a.startMin - b.startMin;
+    });
+    return combined;
+  }, [tvChannels, selectedTvChannelId, now]);
 
   useEffect(() => {
     loadAndroidApps();
@@ -266,32 +542,111 @@ export default function App() {
     }
   }, [powerState, screenSaverActive, settings.liveWallpaper, liveVideoIdx, liveVideos]);
 
-  // Clock + Adzan trigger every second
+  useEffect(() => {
+    if (!isAndroidEnv) return;
+    const onFocus = () => refreshDndPermission();
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [isAndroidEnv, refreshDndPermission]);
+
+  useEffect(() => {
+    if (settings.autoSilent === '0' && dndSession && !dndSession.isTest) {
+      deactivateDndSession({ toastMessage: 'Auto-Silent dinonaktifkan' });
+    }
+  }, [settings.autoSilent, dndSession, deactivateDndSession]);
+
+  // Clock + Adzan + Auto-Silent DND scheduler every second
   useEffect(() => {
     const tickTimer = window.setInterval(() => {
       const current = new Date();
       setNow(current);
-      if (prayerTimes && settings.adzan !== '0') {
+
+      if (dndSession && current.getTime() >= dndSession.endsAtMs) {
+        deactivateDndSession({
+          toastMessage: `Mode Hening (${dndSession.prayerLabel}) selesai · Perangkat kembali normal`,
+        });
+      }
+
+      if (prayerTimes) {
         const p = getTimeParts(settings.tz, current);
         const hm = `${String(p.hour).padStart(2, '0')}:${p.minute}`;
+        const nowSeconds = (p.hour * 60 + Number(p.minute)) * 60 + Number(p.second);
+        const silentDurationMin = settings.autoSilentDurationMin || 15;
+
         for (const key of PRAYER_KEYS) {
+          const timeStr = prayerTimes[key]?.slice(0, 5);
+          if (!timeStr) continue;
+
           const adzanId = `${p.day}-${key}`;
-          if (prayerTimes[key]?.slice(0, 5) === hm && lastAdzanRef.current !== adzanId) {
+          if (settings.adzan !== '0' && timeStr === hm && lastAdzanRef.current !== adzanId) {
             lastAdzanRef.current = adzanId;
             playAdzanSound();
             showToast(`Waktu Sholat ${PRAYER_LABELS[key]} telah tiba`);
+          }
+
+          if (settings.autoSilent === '1') {
+            const [th, tm] = timeStr.split(':').map(Number);
+            if (Number.isFinite(th) && Number.isFinite(tm)) {
+              const startSec = (th * 60 + tm) * 60;
+              const endSec = startSec + silentDurationMin * 60;
+              const silentId = `${p.year}-${p.month}-${p.day}-${key}`;
+              if (
+                nowSeconds >= startSec &&
+                nowSeconds < endSec &&
+                dismissedSilentIdRef.current !== silentId &&
+                lastSilentRef.current !== silentId
+              ) {
+                lastSilentRef.current = silentId;
+                activateDndSession(
+                  silentId,
+                  PRAYER_LABELS[key],
+                  (endSec - nowSeconds) * 1000,
+                  false
+                );
+              }
+            }
           }
         }
       }
     }, 1000);
     return () => window.clearInterval(tickTimer);
-  }, [prayerTimes, settings.adzan, settings.tz, showToast]);
+  }, [
+    prayerTimes,
+    settings.adzan,
+    settings.autoSilent,
+    settings.autoSilentDurationMin,
+    settings.tz,
+    dndSession,
+    activateDndSession,
+    deactivateDndSession,
+    showToast,
+  ]);
 
   // Native Android bridge hooks
   useEffect(() => {
     window.__tvBack = () => {
       if (screenSaverActive) {
         setScreenSaverActive(false);
+        return true;
+      }
+      if (haramainOpen) {
+        setHaramainOpen(false);
+        return true;
+      }
+      if (gameOpen) {
+        setGameOpen(false);
+        return true;
+      }
+      if (mapsOpen) {
+        setMapsOpen(false);
+        return true;
+      }
+      if (chatOpen) {
+        setChatOpen(false);
+        return true;
+      }
+      if (musicOpen) {
+        setMusicOpen(false);
         return true;
       }
       if (qrSyncOpen) {
@@ -322,6 +677,11 @@ export default function App() {
     };
     window.__tvMenu = () => {
       setScreenSaverActive(false);
+      setHaramainOpen(false);
+      setGameOpen(false);
+      setMapsOpen(false);
+      setChatOpen(false);
+      setMusicOpen(false);
       setQrSyncOpen(false);
       setPowerMenuOpen(false);
       setWeeklyModalOpen(false);
@@ -333,6 +693,11 @@ export default function App() {
       if (powerState !== 'awake') {
         setPowerState('awake');
       }
+      setHaramainOpen(false);
+      setGameOpen(false);
+      setMapsOpen(false);
+      setChatOpen(false);
+      setMusicOpen(false);
       setQrSyncOpen(false);
       setSettingsOpen(false);
       setApkModalOpen(false);
@@ -350,6 +715,11 @@ export default function App() {
     };
   }, [
     screenSaverActive,
+    haramainOpen,
+    gameOpen,
+    mapsOpen,
+    chatOpen,
+    musicOpen,
     qrSyncOpen,
     powerMenuOpen,
     powerState,
@@ -386,7 +756,12 @@ export default function App() {
       idleTimerRef.current = null;
     }
 
-    if (mobileSyncSession || powerState !== 'awake' || settings.screenSaver !== '1') {
+    if (
+      mobileSyncSession ||
+      gameOpen ||
+      powerState !== 'awake' ||
+      settings.screenSaver !== '1'
+    ) {
       setScreenSaverActive(false);
       return;
     }
@@ -455,7 +830,7 @@ export default function App() {
       window.removeEventListener('wheel', onPointerAction);
       window.removeEventListener('mousemove', onMouseMove);
     };
-  }, [mobileSyncSession, powerState, settings.screenSaver, screenSaverActive]);
+  }, [mobileSyncSession, gameOpen, powerState, settings.screenSaver, screenSaverActive]);
 
   // Main TV launcher 2D D-pad spatial navigation
   useDpadNavigation({
@@ -468,8 +843,13 @@ export default function App() {
       !weeklyModalOpen &&
       !powerMenuOpen &&
       !qrSyncOpen &&
+      !mapsOpen &&
+      !chatOpen &&
+      !musicOpen &&
+      !gameOpen &&
+      !haramainOpen &&
       powerState === 'awake',
-    soundEnabled: settings.soundNav === '1',
+    soundEnabled: settings.soundNav === '1' && !dndSession,
     dpadSpeed: settings.dpadSpeed,
     onBack: () => {
       if (appSearchQuery) {
@@ -486,7 +866,16 @@ export default function App() {
   const activeThemePhase = resolveTimeTheme(timeParts.hour, settings.themeMode);
   const themePalette = TIME_THEME_PALETTES[activeThemePhase];
   const anyModalOpen =
-    settingsOpen || apkModalOpen || weeklyModalOpen || powerMenuOpen || qrSyncOpen;
+    settingsOpen ||
+    apkModalOpen ||
+    weeklyModalOpen ||
+    powerMenuOpen ||
+    qrSyncOpen ||
+    mapsOpen ||
+    chatOpen ||
+    musicOpen ||
+    gameOpen ||
+    haramainOpen;
 
   const triggerLauncherFadeIn = useCallback(() => {
     if (fadeTimerRef.current !== null) {
@@ -524,7 +913,11 @@ export default function App() {
   }, [anyModalOpen, triggerLauncherFadeIn]);
 
   useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setInitialCardsStaggerDone(true);
+    }, 900);
     return () => {
+      window.clearTimeout(timer);
       if (fadeTimerRef.current !== null) {
         window.clearTimeout(fadeTimerRef.current);
       }
@@ -564,12 +957,32 @@ export default function App() {
     return { key: 'Fajr' as const, diff };
   }, [prayerTimes, timeParts]);
 
+  const visibleDashboardCards = useMemo(
+    () => normalizeDashboardCards(settings.dashboardCards).filter((c) => c.visible),
+    [settings.dashboardCards]
+  );
+
+  const dashboardCardSpanClass =
+    visibleDashboardCards.length === 1
+      ? 'lg:col-span-12'
+      : visibleDashboardCards.length === 2
+      ? 'lg:col-span-6'
+      : 'lg:col-span-4';
+
   const countdownLabel = useMemo(() => {
     if (!nextPrayerInfo) return '';
     const hours = Math.floor(nextPrayerInfo.diff / 3600);
     const mins = Math.floor((nextPrayerInfo.diff % 3600) / 60);
     return `${PRAYER_LABELS[nextPrayerInfo.key]} dalam ${hours > 0 ? `${hours} jam ` : ''}${mins} menit`;
   }, [nextPrayerInfo]);
+
+  const dndRemainingLabel = useMemo(() => {
+    if (!dndSession) return '';
+    const remSec = Math.max(0, Math.ceil((dndSession.endsAtMs - now.getTime()) / 1000));
+    const mm = String(Math.floor(remSec / 60)).padStart(2, '0');
+    const ss = String(remSec % 60).padStart(2, '0');
+    return `${mm}:${ss}`;
+  }, [dndSession, now]);
 
   const browserShortcuts = useMemo<BrowserShortcut[]>(() => {
     return settings.apps
@@ -662,6 +1075,10 @@ export default function App() {
       weeklyModalOpen ||
       powerMenuOpen ||
       qrSyncOpen ||
+      mapsOpen ||
+      chatOpen ||
+      musicOpen ||
+      gameOpen ||
       powerState !== 'awake'
     ) {
       return;
@@ -685,6 +1102,10 @@ export default function App() {
     weeklyModalOpen,
     powerMenuOpen,
     qrSyncOpen,
+    mapsOpen,
+    chatOpen,
+    musicOpen,
+    gameOpen,
     powerState,
     toggleFavoriteApp,
   ]);
@@ -766,6 +1187,13 @@ export default function App() {
       ? liveVideos[liveVideoIdx % liveVideos.length]
       : null;
 
+  const liveWallpaperFilterClass =
+    settings.liveWallpaperFilter === 'monochrome'
+      ? 'grayscale contrast-110'
+      : settings.liveWallpaperFilter === 'sepia'
+      ? 'sepia contrast-105 brightness-95'
+      : '';
+
   const handleQrSyncReceived = useCallback(
     (synced: LauncherSettings) => {
       setSettings(synced);
@@ -782,6 +1210,114 @@ export default function App() {
     () => (weather ? evaluateWeatherWarning(weather) : null),
     [weather]
   );
+
+  const effectiveExtremeHazard = useMemo(() => {
+    if (weatherWarning?.level === 'extreme') {
+      const windGust = Math.max(
+        weather?.current.wind_gusts_10m ?? 0,
+        weather?.current.wind_speed_10m ?? 0,
+        weather?.daily.wind_gusts_10m_max?.[0] ?? 0
+      );
+      const precip = Math.max(
+        weather?.current.precipitation ?? 0,
+        weather?.daily.precipitation_sum?.[0] ?? 0
+      );
+      return {
+        key: `live|${settings.name}|${weatherWarning.title}`,
+        warning: weatherWarning,
+        conditionLabel: currentWxDesc?.label,
+        temperatureC: weather?.current.temperature_2m,
+        windKmh: windGust > 0 ? windGust : undefined,
+        precipMm: precip > 0 ? precip : undefined,
+        isSimulated: false,
+      };
+    }
+
+    if (simulatedExtremeActive) {
+      const simWarning: WeatherWarning = {
+        level: 'extreme',
+        title: 'Cuaca ekstrem: Badai petir & angin kencang',
+        detail: `Simulasi peringatan cuaca ekstrem di ${settings.name}: Hujan lebat disertai petir & hembusan angin 65 km/j`,
+        isCurrentHazard: true,
+        affectedDays: [0],
+      };
+      return {
+        key: `sim|${settings.name}`,
+        warning: simWarning,
+        conditionLabel: 'Badai petir (Simulasi)',
+        temperatureC: weather?.current.temperature_2m,
+        windKmh: 65,
+        precipMm: 58,
+        isSimulated: true,
+      };
+    }
+
+    return null;
+  }, [weatherWarning, simulatedExtremeActive, settings.name, weather, currentWxDesc?.label]);
+
+  const requestEmergencyBroadcast = useCallback(
+    async (forceRefresh = false) => {
+      if (!effectiveExtremeHazard) return;
+      const { key, warning, conditionLabel, temperatureC, windKmh, precipMm, isSimulated } =
+        effectiveExtremeHazard;
+
+      if (!forceRefresh) {
+        const cached = broadcastCacheRef.current.get(key);
+        if (cached) {
+          setEmergencyBroadcast(cached);
+          setBroadcastError(null);
+          return;
+        }
+      }
+
+      setBroadcastLoading(true);
+      setBroadcastError(null);
+      try {
+        const result = await fetchEmergencyBroadcast({
+          cityName: settings.name,
+          warningTitle: warning.title,
+          warningDetail: warning.detail,
+          conditionLabel,
+          temperatureC,
+          windKmh,
+          precipMm,
+          isSimulated,
+        });
+        broadcastCacheRef.current.set(key, result);
+        setEmergencyBroadcast(result);
+      } catch (err) {
+        setBroadcastError(
+          err instanceof Error
+            ? err.message
+            : 'Gagal memuat Pesan Siaran darurat dari asisten AI.'
+        );
+      } finally {
+        setBroadcastLoading(false);
+      }
+    },
+    [effectiveExtremeHazard, settings.name]
+  );
+
+  useEffect(() => {
+    if (!effectiveExtremeHazard) {
+      setEmergencyBroadcast(null);
+      setBroadcastError(null);
+      setBroadcastLoading(false);
+      return;
+    }
+    if (broadcastDismissedKey === effectiveExtremeHazard.key) {
+      return;
+    }
+    requestEmergencyBroadcast(false);
+  }, [effectiveExtremeHazard, broadcastDismissedKey, requestEmergencyBroadcast]);
+
+  const activeBottomBroadcast = customChatBroadcast || emergencyBroadcast;
+  const isEmergencyTickerVisible =
+    !mobileSyncSession &&
+    powerState === 'awake' &&
+    (Boolean(customChatBroadcast) ||
+      (Boolean(effectiveExtremeHazard) &&
+        broadcastDismissedKey !== effectiveExtremeHazard?.key));
 
   useEffect(() => {
     if (!weatherWarning?.isCurrentHazard) return;
@@ -853,7 +1389,7 @@ export default function App() {
             }
           }}
           aria-hidden="true"
-          className={`pointer-events-none fixed inset-0 h-full w-full object-cover transition-opacity duration-700 ${
+          className={`pointer-events-none fixed inset-0 h-full w-full object-cover transition-[opacity,filter] duration-700 ${liveWallpaperFilterClass} ${
             liveVideoReady ? 'opacity-100' : 'opacity-0'
           }`}
         />
@@ -865,11 +1401,28 @@ export default function App() {
         className={`pointer-events-none fixed inset-0 bg-gradient-to-b transition-colors duration-700 ${themePalette.scrimClass}`}
       />
 
+      {gmpQuotaExceeded && (
+        <div className="bg-amber-50 border-b border-amber-200 text-amber-900 px-4 py-2.5 text-xs md:text-sm text-center sticky top-0 z-[65] shadow-sm">
+          <span>
+            Google Maps Platform quota reached. If you are the app owner, visit{' '}
+            <a
+              href="https://developers.google.com/maps/ai/ai-studio?utm_campaign=gmp_mcp_codeassist_v1_aistudio#quota_exceeded_errors"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline font-semibold text-amber-950 hover:text-amber-800"
+            >
+              maps developer site
+            </a>{' '}
+            for instructions to update your account.
+          </span>
+        </div>
+      )}
+
       {/* Safe-Zone 10-Foot TV Container */}
       <div
         className={`relative z-10 flex flex-1 flex-col gap-5 px-6 py-5 md:px-10 md:py-7 lg:min-h-0 ${
-          launcherFadeIn ? 'tv-fade-in-reveal' : ''
-        }`}
+          isEmergencyTickerVisible ? 'pb-16 lg:pb-14' : ''
+        } ${launcherFadeIn ? 'tv-fade-in-reveal' : ''}`}
       >
         {/* Top Bar: Clock / Date / Current Weather + Primary TV Actions */}
         <header className="flex flex-wrap items-start justify-between gap-6">
@@ -990,18 +1543,75 @@ export default function App() {
                 <Package className={`h-4 w-4 ${themePalette.accentTextClass}`} />
                 <span>Bangun APK TV</span>
               </button>
+
+              <ConnectionStatusBadge
+                tileClass={themePalette.tileClass}
+                isAndroidEnv={isAndroidEnv}
+                onToast={showToast}
+              />
             </div>
           </div>
         </header>
 
-        {/* Main 3-Column TV Info Grid */}
-        <main className="grid flex-1 grid-cols-1 gap-4 lg:min-h-0 lg:grid-cols-12 lg:gap-5">
-          {/* Card 1: Waktu Sholat + Hijriyah + Grafik Mingguan */}
-          <section className={`flex flex-col rounded-2xl border p-5 backdrop-blur-sm transition-colors duration-700 lg:col-span-4 lg:min-h-0 ${themePalette.cardClass}`}>
+        {/* Main Dynamic TV Info Grid */}
+        <MotionConfig reducedMotion="user">
+          <main className="grid flex-1 grid-cols-1 gap-4 lg:min-h-0 lg:grid-cols-12 lg:gap-5">
+            <AnimatePresence mode="popLayout">
+              {visibleDashboardCards.length === 0 ? (
+                <motion.div
+                  key="dashboard-empty"
+                  initial={{ opacity: 0, y: 16, scale: 0.985 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -10, scale: 0.98 }}
+                  transition={{ duration: 0.34, ease: [0.16, 1, 0.3, 1] }}
+                  className={`lg:col-span-12 flex flex-col items-center justify-center gap-3 rounded-2xl border p-8 text-center backdrop-blur-sm ${themePalette.cardClass}`}
+                >
+                  <LayoutGrid className={`h-8 w-8 ${themePalette.accentTextClass}`} />
+                  <div className="space-y-1">
+                    <h2 className="text-base font-semibold text-slate-100">
+                      Semua Kartu Dashboard Disembunyikan
+                    </h2>
+                    <p className="text-xs text-slate-400 md:text-sm">
+                      Buka Pengaturan untuk menampilkan kembali atau mengatur ulang posisi kartu Sholat, Jadwal, dan Cuaca.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    data-focusable="true"
+                    data-dpad-row="cards"
+                    onClick={() => setSettingsOpen(true)}
+                    className={`mt-1 flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold ${themePalette.primaryButtonClass}`}
+                  >
+                    <LayoutGrid className="h-4 w-4" />
+                    <span>Atur Kartu di Pengaturan</span>
+                  </button>
+                </motion.div>
+              ) : (
+                visibleDashboardCards.map((card, cardIdx) => {
+                  const enterDelay = !initialCardsStaggerDone ? cardIdx * 0.12 : 0.04;
+                  const cardTransition = {
+                    opacity: { duration: 0.44, delay: enterDelay, ease: [0.16, 1, 0.3, 1] as const },
+                    y: { duration: 0.46, delay: enterDelay, ease: [0.16, 1, 0.3, 1] as const },
+                    scale: { duration: 0.44, delay: enterDelay, ease: [0.16, 1, 0.3, 1] as const },
+                    layout: { duration: 0.46, delay: 0.06, ease: [0.16, 1, 0.3, 1] as const },
+                  };
+
+                  if (card.id === 'prayer') {
+                    return (
+                      <motion.section
+                        key="prayer"
+                        layout="position"
+                        initial={{ opacity: 0, y: 20, scale: 0.985 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -12, scale: 0.97 }}
+                        transition={cardTransition}
+                        className={`tv-dashboard-card flex flex-col rounded-2xl border p-5 backdrop-blur-sm ${dashboardCardSpanClass} lg:min-h-0 ${themePalette.cardClass}`}
+                      >
             <div className="flex flex-wrap items-start justify-between gap-2 pb-2.5">
               <div>
-                <h2 className="text-sm font-semibold tracking-wide text-slate-300">
-                  Waktu Sholat
+                <h2 className="tv-card-title flex items-center gap-2 text-sm font-semibold tracking-wide text-slate-300 transition-colors">
+                  <span aria-hidden="true" className="tv-card-focus-dot h-2 w-2 rounded-full" />
+                  <span>Waktu Sholat</span>
                 </h2>
                 <p className="mt-0.5 flex items-center gap-1.5 text-xs text-emerald-300">
                   <Calendar className="h-3.5 w-3.5 shrink-0" />
@@ -1037,6 +1647,19 @@ export default function App() {
                   <BarChart3 className="h-3.5 w-3.5" />
                   <span>Grafik</span>
                 </button>
+                <button
+                  type="button"
+                  data-focusable="true"
+                  data-dpad-row="cards"
+                  onClick={() => {
+                    setHaramainInitialCity('makkah');
+                    setHaramainOpen(true);
+                  }}
+                  className="flex items-center gap-1 rounded-lg border border-emerald-400/45 bg-emerald-500/15 px-2.5 py-1 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/25 whitespace-nowrap shrink-0"
+                >
+                  <Radio className="h-3.5 w-3.5 text-emerald-300" />
+                  <span>Haramain</span>
+                </button>
               </div>
             </div>
 
@@ -1046,16 +1669,87 @@ export default function App() {
                   ? countdownLabel
                   : 'Jadwal & pengingat Adzan'}
               </div>
-              <AudioVisualizer
-                accentClass={
-                  activeThemePhase === 'dawn'
-                    ? 'bg-orange-400'
-                    : activeThemePhase === 'night'
-                    ? 'bg-violet-400'
-                    : 'bg-sky-400'
-                }
-              />
+              <div className="flex items-center gap-2 shrink-0">
+                <span
+                  className={`flex items-center gap-1 text-xs font-medium ${
+                    dndSession
+                      ? 'text-violet-300'
+                      : settings.autoSilent === '1'
+                      ? 'text-slate-400'
+                      : 'text-slate-500'
+                  }`}
+                  title="Auto-Silent (Do Not Disturb) saat waktu sholat"
+                >
+                  <BellOff className="h-3.5 w-3.5" />
+                  <span>
+                    {dndSession
+                      ? `Hening ${dndRemainingLabel}`
+                      : settings.autoSilent === '1'
+                      ? `DND ${settings.autoSilentDurationMin}m`
+                      : 'DND Off'}
+                  </span>
+                </span>
+                <AudioVisualizer
+                  accentClass={
+                    activeThemePhase === 'dawn'
+                      ? 'bg-orange-400'
+                      : activeThemePhase === 'night'
+                      ? 'bg-violet-400'
+                      : 'bg-sky-400'
+                  }
+                />
+              </div>
             </div>
+
+            {dndSession && (
+              <div className="mb-2 flex items-center justify-between gap-2 rounded-xl border border-violet-400/45 bg-violet-500/15 px-3 py-2 text-xs text-violet-100">
+                <div className="flex min-w-0 items-center gap-2">
+                  <BellOff className="h-4 w-4 shrink-0 text-violet-300" />
+                  <div className="min-w-0">
+                    <div className="truncate font-semibold">
+                      Mode Hening (DND) · {dndSession.prayerLabel}
+                    </div>
+                    <div className="font-mono-tabular text-[11px] text-violet-200/85">
+                      Otomatis berakhir dalam {dndRemainingLabel}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  data-focusable="true"
+                  data-dpad-row="cards"
+                  onClick={() =>
+                    deactivateDndSession({
+                      markDismissed: true,
+                      toastMessage: 'Mode Hening diakhiri manual',
+                    })
+                  }
+                  className="rounded-lg border border-violet-300/40 bg-violet-500/25 px-2.5 py-1 text-[11px] font-semibold text-violet-50 hover:bg-violet-500/40 whitespace-nowrap shrink-0"
+                >
+                  Akhiri
+                </button>
+              </div>
+            )}
+
+            {isAndroidEnv && settings.autoSilent === '1' && dndBridgeGranted === false && (
+              <div className="mb-2 flex items-center justify-between gap-2 rounded-xl border border-amber-400/45 bg-amber-500/12 px-3 py-1.5 text-[11px] text-amber-100">
+                <span className="truncate">
+                  Perlu izin Jangan Ganggu agar TV Box hening otomatis
+                </span>
+                <button
+                  type="button"
+                  data-focusable="true"
+                  data-dpad-row="cards"
+                  onClick={() => {
+                    window.Android?.requestDndPermission?.();
+                    showToast('Membuka pengaturan izin DND Android TV');
+                  }}
+                  className="rounded-lg border border-amber-400/50 bg-amber-500/25 px-2 py-0.5 font-semibold text-amber-50 hover:bg-amber-500/35 whitespace-nowrap shrink-0"
+                >
+                  Izinkan
+                </button>
+              </div>
+            )}
 
             <div className="flex-1 space-y-1.5 overflow-y-auto no-scrollbar">
               {prayerLoading ? (
@@ -1131,6 +1825,38 @@ export default function App() {
                   data-focusable="true"
                   data-dpad-row="cards"
                   onClick={() => {
+                    if (dndSession) {
+                      deactivateDndSession({
+                        markDismissed: true,
+                        toastMessage: 'Mode Hening dimatikan',
+                      });
+                    } else {
+                      activateDndSession(
+                        `test-${Date.now()}`,
+                        'Uji Hening',
+                        (settings.autoSilentDurationMin || 15) * 60 * 1000,
+                        true
+                      );
+                    }
+                  }}
+                  className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium whitespace-nowrap shrink-0 ${
+                    dndSession
+                      ? 'border-violet-400/60 bg-violet-500/25 text-violet-100 hover:bg-violet-500/35'
+                      : 'border-slate-700/80 bg-slate-800/90 text-slate-200 hover:bg-slate-700'
+                  }`}
+                >
+                  <BellOff
+                    className={`h-3.5 w-3.5 ${
+                      dndSession ? 'text-violet-300' : themePalette.accentTextClass
+                    }`}
+                  />
+                  <span>{dndSession ? 'Stop DND' : 'Tes DND'}</span>
+                </button>
+                <button
+                  type="button"
+                  data-focusable="true"
+                  data-dpad-row="cards"
+                  onClick={() => {
                     playAdzanSound();
                     showToast('Memutar suara pengingat Adzan');
                   }}
@@ -1141,112 +1867,413 @@ export default function App() {
                 </button>
               </div>
             </div>
-          </section>
+          </motion.section>
+                );
+              }
 
-          {/* Card 2: Jadwal Pertandingan */}
-          <section className={`flex flex-col rounded-2xl border p-5 backdrop-blur-sm transition-colors duration-700 lg:col-span-4 lg:min-h-0 ${themePalette.cardClass}`}>
-            <div className="flex items-center justify-between gap-2 pb-3">
+              if (card.id === 'schedule') {
+                return (
+                  <motion.section
+                    key="schedule"
+                    layout="position"
+                    initial={{ opacity: 0, y: 20, scale: 0.985 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -12, scale: 0.97 }}
+                    transition={cardTransition}
+                    className={`tv-dashboard-card flex flex-col rounded-2xl border p-5 backdrop-blur-sm ${dashboardCardSpanClass} lg:min-h-0 ${themePalette.cardClass}`}
+                  >
+            <div className="flex flex-wrap items-start justify-between gap-2 pb-2.5">
               <div>
-                <h2 className="text-sm font-semibold tracking-wide text-slate-300">
-                  Jadwal Pertandingan
+                <h2 className="tv-card-title flex items-center gap-2 text-sm font-semibold tracking-wide text-slate-300 transition-colors">
+                  <span aria-hidden="true" className="tv-card-focus-dot h-2 w-2 rounded-full" />
+                  <span>{card2Tab === 'matches' ? 'Jadwal Pertandingan' : 'Jadwal TV Nasional'}</span>
                 </h2>
-                <p className="text-xs text-slate-400">{activeLeagueName}</p>
+                <p className="text-xs text-slate-400">
+                  {card2Tab === 'matches'
+                    ? activeLeagueName
+                    : selectedTvChannelId === 'all'
+                    ? `${(settings.favoriteTvChannels || []).length} channel favorit · WIB`
+                    : `${
+                        INDONESIAN_TV_CHANNELS.find((c) => c.id === selectedTvChannelId)?.name ||
+                        selectedTvChannelId.toUpperCase()
+                      } · Acara hari ini`}
+                </p>
               </div>
-              <button
-                type="button"
-                data-focusable="true"
-                data-dpad-row="cards"
-                onClick={handleCycleLeague}
-                className="flex items-center gap-1.5 rounded-lg border border-slate-700/80 bg-slate-800/90 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700 whitespace-nowrap shrink-0"
-              >
-                <Trophy className="h-3.5 w-3.5 text-amber-300" />
-                <span>Ganti Liga</span>
-              </button>
+
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  data-focusable="true"
+                  data-dpad-row="cards"
+                  onClick={() => {
+                    setCard2Tab('matches');
+                    setTvChannelPickerOpen(false);
+                  }}
+                  className={`rounded-lg border px-2.5 py-1 text-xs font-medium whitespace-nowrap shrink-0 ${
+                    card2Tab === 'matches'
+                      ? themePalette.activeTabClass
+                      : 'border-slate-700/80 bg-slate-800/85 text-slate-300 hover:bg-slate-800'
+                  }`}
+                >
+                  Bola
+                </button>
+                <button
+                  type="button"
+                  data-focusable="true"
+                  data-dpad-row="cards"
+                  onClick={() => setCard2Tab('tv')}
+                  className={`flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-medium whitespace-nowrap shrink-0 ${
+                    card2Tab === 'tv'
+                      ? themePalette.activeTabClass
+                      : 'border-slate-700/80 bg-slate-800/85 text-slate-300 hover:bg-slate-800'
+                  }`}
+                >
+                  <Tv className="h-3.5 w-3.5" />
+                  <span>Jadwal TV</span>
+                </button>
+              </div>
             </div>
 
-            <div className="flex-1 divide-y divide-slate-800/80 overflow-y-auto no-scrollbar pr-1">
-              {matchesLoading ? (
-                <div className="space-y-2.5 py-2">
-                  {[0, 1, 2, 3].map((idx) => (
-                    <div
-                      key={idx}
-                      className="h-14 animate-pulse rounded-xl bg-slate-800/70"
-                    />
-                  ))}
+            {card2Tab === 'matches' ? (
+              <>
+                <div className="flex items-center justify-end pb-2">
+                  <button
+                    type="button"
+                    data-focusable="true"
+                    data-dpad-row="cards"
+                    onClick={handleCycleLeague}
+                    className="flex items-center gap-1.5 rounded-lg border border-slate-700/80 bg-slate-800/90 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700 whitespace-nowrap shrink-0"
+                  >
+                    <Trophy className="h-3.5 w-3.5 text-amber-300" />
+                    <span>Ganti Liga</span>
+                  </button>
                 </div>
-              ) : matches.length === 0 ? (
-                <div className="py-6 text-sm text-slate-400">
-                  Belum ada jadwal pertandingan tersedia untuk liga ini.
-                </div>
-              ) : (
-                matches.slice(0, 6).map((m, idx) => {
-                  const dateIso = `${m.dateEvent}T${m.strTime || '00:00:00'}${
-                    m.strTime ? 'Z' : ''
-                  }`;
-                  const d = new Date(dateIso);
-                  let kickoff = m.dateEvent;
-                  try {
-                    kickoff = new Intl.DateTimeFormat('id-ID', {
-                      timeZone: settings.tz,
-                      weekday: 'short',
-                      day: 'numeric',
-                      month: 'short',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      hour12: false,
-                    }).format(d);
-                  } catch {
-                    // keep fallback
-                  }
 
-                  return (
-                    <button
-                      key={m.idEvent || `${m.strHomeTeam}-${idx}`}
-                      type="button"
-                      data-focusable="true"
-                      data-dpad-row="cards"
-                      onClick={() =>
-                        showToast(`${m.strHomeTeam} vs ${m.strAwayTeam} · ${kickoff}`)
+                <div className="flex-1 divide-y divide-slate-800/80 overflow-y-auto px-1 py-1 no-scrollbar">
+                  {matchesLoading ? (
+                    <div className="space-y-2.5 py-2">
+                      {[0, 1, 2, 3].map((idx) => (
+                        <div
+                          key={idx}
+                          className="h-14 animate-pulse rounded-xl bg-slate-800/70"
+                        />
+                      ))}
+                    </div>
+                  ) : matches.length === 0 ? (
+                    <div className="py-6 text-sm text-slate-400">
+                      Belum ada jadwal pertandingan tersedia untuk liga ini.
+                    </div>
+                  ) : (
+                    matches.slice(0, 6).map((m, idx) => {
+                      const dateIso = `${m.dateEvent}T${m.strTime || '00:00:00'}${
+                        m.strTime ? 'Z' : ''
+                      }`;
+                      const d = new Date(dateIso);
+                      let kickoff = m.dateEvent;
+                      try {
+                        kickoff = new Intl.DateTimeFormat('id-ID', {
+                          timeZone: settings.tz,
+                          weekday: 'short',
+                          day: 'numeric',
+                          month: 'short',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          hour12: false,
+                        }).format(d);
+                      } catch {
+                        // keep fallback
                       }
-                      className="flex w-full flex-col items-start rounded-xl px-3 py-2.5 text-left hover:bg-slate-800/60"
-                    >
-                      <span className="text-sm font-medium text-slate-100 md:text-base">
-                        {m.strHomeTeam} vs {m.strAwayTeam}
-                      </span>
-                      <span className="mt-0.5 font-mono-tabular text-xs text-slate-400">
-                        {kickoff}
-                        {m.strTime ? '' : ' (jam belum pasti)'}
-                        {m.strLeague ? ` · ${m.strLeague}` : ''}
-                      </span>
-                    </button>
-                  );
-                })
-              )}
-            </div>
-          </section>
 
-          {/* Card 3: Prakiraan Cuaca */}
-          <section className={`flex flex-col rounded-2xl border p-5 backdrop-blur-sm transition-colors duration-700 lg:col-span-4 lg:min-h-0 ${themePalette.cardClass}`}>
+                      return (
+                        <button
+                          key={m.idEvent || `${m.strHomeTeam}-${idx}`}
+                          type="button"
+                          data-focusable="true"
+                          data-dpad-row="cards"
+                          onClick={() =>
+                            showToast(`${m.strHomeTeam} vs ${m.strAwayTeam} · ${kickoff}`)
+                          }
+                          className="flex w-full flex-col items-start rounded-xl px-3 py-2.5 text-left hover:bg-slate-800/60"
+                        >
+                          <span className="text-sm font-medium text-slate-100 md:text-base">
+                            {m.strHomeTeam} vs {m.strAwayTeam}
+                          </span>
+                          <span className="mt-0.5 font-mono-tabular text-xs text-slate-400">
+                            {kickoff}
+                            {m.strTime ? '' : ' (jam belum pasti)'}
+                            {m.strLeague ? ` · ${m.strLeague}` : ''}
+                          </span>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Favorite TV Channel Strip */}
+                <div className="flex items-center gap-1.5 overflow-x-auto px-1 py-1.5 no-scrollbar">
+                  <button
+                    type="button"
+                    data-focusable="true"
+                    data-dpad-row="cards"
+                    onClick={() => {
+                      setTvChannelPickerOpen(false);
+                      setSelectedTvChannelId('all');
+                      if (tvListScrollRef.current) tvListScrollRef.current.scrollTop = 0;
+                    }}
+                    className={`rounded-lg border px-2.5 py-1 text-xs font-medium whitespace-nowrap shrink-0 ${
+                      selectedTvChannelId === 'all'
+                        ? themePalette.activeTabClass
+                        : 'border-slate-700/80 bg-slate-800/80 text-slate-300 hover:bg-slate-800'
+                    }`}
+                  >
+                    Semua
+                  </button>
+
+                  {(settings.favoriteTvChannels || []).map((chId) => {
+                    const chInfo = INDONESIAN_TV_CHANNELS.find((c) => c.id === chId);
+                    const chLabel = chInfo?.name || chId.toUpperCase();
+                    const active = selectedTvChannelId === chId;
+                    return (
+                      <button
+                        key={chId}
+                        type="button"
+                        data-focusable="true"
+                        data-dpad-row="cards"
+                        onClick={() => {
+                          setTvChannelPickerOpen(false);
+                          setSelectedTvChannelId(chId);
+                          if (tvListScrollRef.current) tvListScrollRef.current.scrollTop = 0;
+                        }}
+                        className={`rounded-lg border px-2.5 py-1 text-xs font-medium whitespace-nowrap shrink-0 ${
+                          active
+                            ? themePalette.activeTabClass
+                            : 'border-slate-700/80 bg-slate-800/80 text-slate-300 hover:bg-slate-800'
+                        }`}
+                      >
+                        {chLabel}
+                      </button>
+                    );
+                  })}
+
+                  <button
+                    type="button"
+                    data-focusable="true"
+                    data-dpad-row="cards"
+                    onClick={() => setTvChannelPickerOpen((prev) => !prev)}
+                    className={`flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-medium whitespace-nowrap shrink-0 ${
+                      tvChannelPickerOpen
+                        ? 'border-amber-400 bg-amber-500/20 text-amber-100'
+                        : 'border-slate-700/80 bg-slate-800/80 text-amber-300 hover:bg-slate-800'
+                    }`}
+                  >
+                    <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                    <span>{tvChannelPickerOpen ? 'Tutup' : 'Favorit'}</span>
+                  </button>
+                </div>
+
+                {tvChannelPickerOpen ? (
+                  <div className="flex-1 overflow-y-auto px-1 py-2 no-scrollbar">
+                    <div className="mb-2 text-xs text-slate-400">
+                      Pilih channel TV nasional favorit Anda (maks. 8 disarankan):
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {INDONESIAN_TV_CHANNELS.map((ch) => {
+                        const isFav = (settings.favoriteTvChannels || []).includes(ch.id);
+                        return (
+                          <button
+                            key={ch.id}
+                            type="button"
+                            data-focusable="true"
+                            data-dpad-row="cards"
+                            onClick={() => toggleFavoriteTvChannel(ch.id, ch.name)}
+                            className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium whitespace-nowrap ${
+                              isFav
+                                ? 'border-amber-400/70 bg-amber-500/20 text-amber-100'
+                                : 'border-slate-700/80 bg-slate-800/80 text-slate-300 hover:bg-slate-800'
+                            }`}
+                          >
+                            <Star
+                              className={`h-3 w-3 ${
+                                isFav ? 'fill-amber-400 text-amber-400' : 'text-slate-500'
+                              }`}
+                            />
+                            <span>{ch.name}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    ref={tvListScrollRef}
+                    className="flex-1 overflow-y-auto px-1 py-1 no-scrollbar"
+                  >
+                    <MotionConfig reducedMotion="user">
+                      <AnimatePresence mode="wait" initial={false}>
+                        {tvLoading && displayedTvPrograms.length === 0 ? (
+                          <motion.div
+                            key="tv-loading"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.16, ease: 'easeOut' }}
+                            className="space-y-2.5 py-2"
+                          >
+                            {[0, 1, 2, 3].map((idx) => (
+                              <div
+                                key={idx}
+                                className="h-12 animate-pulse rounded-xl bg-slate-800/70"
+                              />
+                            ))}
+                          </motion.div>
+                        ) : displayedTvPrograms.length === 0 ? (
+                          <motion.div
+                            key={`tv-empty-${selectedTvChannelId}`}
+                            initial={{ opacity: 0, y: 4 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -4 }}
+                            transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                            className="py-6 text-sm text-slate-400"
+                          >
+                            Jadwal siaran TV belum tersedia. Periksa koneksi internet Anda.
+                          </motion.div>
+                        ) : (
+                          <motion.div
+                            key={selectedTvChannelId}
+                            initial={{ opacity: 0, y: 6 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -4 }}
+                            transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                            className="divide-y divide-slate-800/80"
+                          >
+                            {displayedTvPrograms.map((prog, idx) => (
+                              <button
+                                key={`${prog.channelId}-${prog.time}-${idx}`}
+                                type="button"
+                                data-focusable="true"
+                                data-dpad-row="cards"
+                                onClick={() =>
+                                  showToast(`${prog.channelName} · ${prog.timeLabel} — ${prog.title}`)
+                                }
+                                className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left transition-colors ${
+                                  prog.isLive
+                                    ? 'bg-sky-500/12 hover:bg-sky-500/20'
+                                    : 'hover:bg-slate-800/60'
+                                }`}
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-2 text-xs">
+                                    <span className={`font-semibold ${themePalette.accentTextClass}`}>
+                                      {prog.channelName}
+                                    </span>
+                                    <span className="font-mono-tabular text-slate-400">
+                                      {prog.timeLabel}
+                                    </span>
+                                    {prog.isLive && (
+                                      <span className="font-semibold text-emerald-300">
+                                        · Sedang Tayang
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="mt-0.5 truncate text-sm font-medium text-slate-100">
+                                    {prog.title}
+                                  </div>
+                                </div>
+                              </button>
+                            ))}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </MotionConfig>
+                  </div>
+                )}
+              </>
+            )}
+          </motion.section>
+                );
+              }
+
+              return (
+                <motion.section
+                  key="weather"
+                  layout="position"
+                  initial={{ opacity: 0, y: 20, scale: 0.985 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -12, scale: 0.97 }}
+                  transition={cardTransition}
+                  className={`tv-dashboard-card flex flex-col rounded-2xl border p-5 backdrop-blur-sm ${dashboardCardSpanClass} lg:min-h-0 ${themePalette.cardClass}`}
+                >
             <div className="flex items-center justify-between gap-2 pb-3">
               <div>
-                <h2 className="text-sm font-semibold tracking-wide text-slate-300">
-                  Prakiraan Cuaca
+                <h2 className="tv-card-title flex items-center gap-2 text-sm font-semibold tracking-wide text-slate-300 transition-colors">
+                  <span aria-hidden="true" className="tv-card-focus-dot h-2 w-2 rounded-full" />
+                  <span>Prakiraan Cuaca</span>
                 </h2>
                 <p className="text-xs text-slate-400">5 hari ke depan · {settings.name}</p>
               </div>
-              <button
-                type="button"
-                data-focusable="true"
-                data-dpad-row="cards"
-                onClick={() => {
-                  loadAllData(settings);
-                  showToast('Memperbarui data cuaca, sholat & bola');
-                }}
-                className="flex items-center gap-1.5 rounded-lg border border-slate-700/80 bg-slate-800/90 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700 whitespace-nowrap shrink-0"
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${themePalette.accentTextClass}`} />
-                <span>Perbarui</span>
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  data-focusable="true"
+                  data-dpad-row="cards"
+                  onClick={() => {
+                    if (weatherWarning?.level === 'extreme') {
+                      setBroadcastDismissedKey(null);
+                      setCustomChatBroadcast(null);
+                      requestEmergencyBroadcast(true);
+                      showToast('Memperbarui Pesan Siaran darurat dari Asisten AI');
+                    } else if (simulatedExtremeActive) {
+                      setSimulatedExtremeActive(false);
+                      setBroadcastDismissedKey(null);
+                      showToast('Simulasi Pesan Siaran darurat dihentikan');
+                    } else {
+                      setBroadcastDismissedKey(null);
+                      setCustomChatBroadcast(null);
+                      setSimulatedExtremeActive(true);
+                      showToast('Mengaktifkan simulasi Pesan Siaran darurat AI');
+                    }
+                  }}
+                  className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium whitespace-nowrap shrink-0 ${
+                    weatherWarning?.level === 'extreme' || simulatedExtremeActive
+                      ? 'border-rose-400/60 bg-rose-500/20 text-rose-100 hover:bg-rose-500/30'
+                      : 'border-slate-700/80 bg-slate-800/90 text-slate-200 hover:bg-slate-700'
+                  }`}
+                >
+                  <Radio
+                    className={`h-3.5 w-3.5 ${
+                      weatherWarning?.level === 'extreme' || simulatedExtremeActive
+                        ? 'text-rose-300'
+                        : themePalette.accentTextClass
+                    }`}
+                  />
+                  <span>
+                    {weatherWarning?.level === 'extreme'
+                      ? 'Siaran AI'
+                      : simulatedExtremeActive
+                      ? 'Stop Siaran'
+                      : 'Uji Siaran'}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  data-focusable="true"
+                  data-dpad-row="cards"
+                  onClick={() => {
+                    loadAllData(settings);
+                    showToast('Memperbarui data cuaca, sholat & bola');
+                  }}
+                  className="flex items-center gap-1.5 rounded-lg border border-slate-700/80 bg-slate-800/90 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700 whitespace-nowrap shrink-0"
+                >
+                  <RefreshCw
+                    className={`h-3.5 w-3.5 transition-transform duration-500 ${themePalette.accentTextClass} ${
+                      weatherLoading ? 'animate-spin' : ''
+                    }`}
+                  />
+                  <span>{weatherLoading ? 'Memperbarui…' : 'Perbarui'}</span>
+                </button>
+              </div>
             </div>
 
             {weatherWarning && (
@@ -1254,7 +2281,14 @@ export default function App() {
                 type="button"
                 data-focusable="true"
                 data-dpad-row="cards"
-                onClick={() => showToast(weatherWarning.detail)}
+                onClick={() => {
+                  if (weatherWarning.level === 'extreme') {
+                    setBroadcastDismissedKey(null);
+                    setCustomChatBroadcast(null);
+                    requestEmergencyBroadcast(false);
+                  }
+                  showToast(weatherWarning.detail);
+                }}
                 aria-label={`Peringatan cuaca: ${weatherWarning.detail}`}
                 className={`mb-2 flex w-full items-center gap-2.5 border-y px-2 py-2 text-left transition-colors ${
                   weatherWarning.level === 'extreme'
@@ -1279,7 +2313,7 @@ export default function App() {
               </button>
             )}
 
-            <div className="flex-1 divide-y divide-slate-800/70 overflow-y-auto no-scrollbar">
+            <div className="flex-1 divide-y divide-slate-800/70 overflow-y-auto px-1 py-1 no-scrollbar">
               {weatherLoading ? (
                 <div className="space-y-2.5 py-2">
                   {[0, 1, 2, 3, 4].map((idx) => (
@@ -1309,10 +2343,18 @@ export default function App() {
                   const minTemp = Math.round(weather.daily.temperature_2m_min[idx]);
 
                   return (
-                    <div
+                    <button
                       key={dateStr}
+                      type="button"
+                      data-focusable="true"
+                      data-dpad-row="cards"
                       title={dayWarn?.label}
-                      className="flex items-center justify-between py-3 text-sm md:text-base"
+                      onClick={() =>
+                        showToast(
+                          `${dayName} (${settings.name}): ${desc.label} · Hujan ${rainProb}% · ${minTemp}°–${maxTemp}°C`
+                        )
+                      }
+                      className="flex w-full items-center justify-between rounded-xl px-2.5 py-2.5 text-left text-sm hover:bg-slate-800/60 md:text-base"
                     >
                       <span className="flex w-24 items-center gap-1.5 font-medium text-slate-200">
                         <span>{dayName}</span>
@@ -1326,7 +2368,18 @@ export default function App() {
                         )}
                       </span>
                       <div className="flex items-center gap-2 text-slate-300">
-                        <WeatherIcon kind={desc.kind} className="h-5 w-5" />
+                        <span
+                          key={`${weatherRevision}-${dateStr}-${desc.kind}`}
+                          className={`inline-flex items-center justify-center tv-weather-icon-enter tv-weather-stagger-${Math.min(
+                            idx,
+                            4
+                          )}`}
+                        >
+                          <WeatherIcon
+                            kind={desc.kind}
+                            className="h-5 w-5 transition-transform duration-300 ease-out"
+                          />
+                        </span>
                         <span className={`font-mono-tabular text-xs md:text-sm ${themePalette.accentTextClass}`}>
                           {rainProb}%
                         </span>
@@ -1334,13 +2387,18 @@ export default function App() {
                       <span className="font-mono-tabular font-medium text-slate-100">
                         {maxTemp}° / <span className="text-slate-400">{minTemp}°</span>
                       </span>
-                    </div>
+                    </button>
                   );
                 })
               )}
             </div>
-          </section>
-        </main>
+          </motion.section>
+              );
+            })
+          )}
+            </AnimatePresence>
+          </main>
+        </MotionConfig>
 
         {/* Bottom Apps & System Rail (D-Pad Scrollable) */}
         <footer className="space-y-2">
@@ -1525,6 +2583,64 @@ export default function App() {
               data-focusable="true"
               data-dpad-row="apps"
               onClick={() => {
+                setHaramainInitialCity('makkah');
+                setHaramainOpen(true);
+              }}
+              className={`flex shrink-0 items-center gap-3 rounded-xl border px-5 py-3.5 text-sm font-medium whitespace-nowrap md:text-base ${themePalette.tileClass}`}
+            >
+              <Radio className="h-5 w-5 text-emerald-400" />
+              <span>Makkah &amp; Madinah Live</span>
+            </button>
+
+            <button
+              type="button"
+              data-focusable="true"
+              data-dpad-row="apps"
+              onClick={() => setMapsOpen(true)}
+              className={`flex shrink-0 items-center gap-3 rounded-xl border px-5 py-3.5 text-sm font-medium whitespace-nowrap md:text-base ${themePalette.tileClass}`}
+            >
+              <MapPin className="h-5 w-5 text-emerald-400" />
+              <span>Peta &amp; Sekitar</span>
+            </button>
+
+            <button
+              type="button"
+              data-focusable="true"
+              data-dpad-row="apps"
+              onClick={() => setChatOpen(true)}
+              className={`flex shrink-0 items-center gap-3 rounded-xl border px-5 py-3.5 text-sm font-medium whitespace-nowrap md:text-base ${themePalette.tileClass}`}
+            >
+              <Bot className="h-5 w-5 text-sky-400" />
+              <span>Asisten AI</span>
+            </button>
+
+            <button
+              type="button"
+              data-focusable="true"
+              data-dpad-row="apps"
+              onClick={() => setMusicOpen(true)}
+              className={`flex shrink-0 items-center gap-3 rounded-xl border px-5 py-3.5 text-sm font-medium whitespace-nowrap md:text-base ${themePalette.tileClass}`}
+            >
+              <Music className="h-5 w-5 text-amber-300" />
+              <span>Studio Musik</span>
+            </button>
+
+            <button
+              type="button"
+              data-focusable="true"
+              data-dpad-row="apps"
+              onClick={() => setGameOpen(true)}
+              className={`flex shrink-0 items-center gap-3 rounded-xl border px-5 py-3.5 text-sm font-medium whitespace-nowrap md:text-base ${themePalette.tileClass}`}
+            >
+              <Gamepad2 className="h-5 w-5 text-amber-400" />
+              <span>Orbit Sentinel</span>
+            </button>
+
+            <button
+              type="button"
+              data-focusable="true"
+              data-dpad-row="apps"
+              onClick={() => {
                 setFavoriteEditMode((prev) => {
                   const next = !prev;
                   showToast(
@@ -1592,6 +2708,41 @@ export default function App() {
         </footer>
       </div>
 
+      {/* Bottom-of-Screen Emergency AI Broadcast Running Text (Pesan Siaran) */}
+      <EmergencyBroadcastTicker
+        visible={isEmergencyTickerVisible}
+        cityName={settings.name}
+        warningTitle={
+          effectiveExtremeHazard?.warning.title || 'Pesan Siaran Asisten AI'
+        }
+        broadcast={activeBottomBroadcast}
+        loading={broadcastLoading && !customChatBroadcast}
+        error={customChatBroadcast ? null : broadcastError}
+        isSimulated={
+          customChatBroadcast ? false : Boolean(effectiveExtremeHazard?.isSimulated)
+        }
+        onRetry={() => {
+          if (customChatBroadcast) {
+            setCustomChatBroadcast(null);
+          }
+          requestEmergencyBroadcast(true);
+        }}
+        onOpenAssistant={() => setChatOpen(true)}
+        onDismiss={() => {
+          if (customChatBroadcast) {
+            setCustomChatBroadcast(null);
+            return;
+          }
+          if (effectiveExtremeHazard) {
+            if (effectiveExtremeHazard.isSimulated) {
+              setSimulatedExtremeActive(false);
+            } else {
+              setBroadcastDismissedKey(effectiveExtremeHazard.key);
+            }
+          }
+        }}
+      />
+
       {/* Inline TV Toast Notification */}
       {toast && (
         <div
@@ -1639,7 +2790,7 @@ export default function App() {
         hijriDate={hijriDate}
         weekly={weeklyPrayers}
         filter={prayerChartFilter}
-        soundNav={settings.soundNav === '1'}
+        soundNav={settings.soundNav === '1' && !dndSession}
         dpadSpeed={settings.dpadSpeed}
         onFilterChange={setPrayerChartFilter}
         onClose={() => setWeeklyModalOpen(false)}
@@ -1647,7 +2798,7 @@ export default function App() {
 
       <PowerMenuModal
         isOpen={powerMenuOpen}
-        soundNav={settings.soundNav === '1'}
+        soundNav={settings.soundNav === '1' && !dndSession}
         dpadSpeed={settings.dpadSpeed}
         onAction={handlePowerAction}
         onClose={() => setPowerMenuOpen(false)}
@@ -1656,13 +2807,89 @@ export default function App() {
       <QrSyncModal
         isOpen={qrSyncOpen}
         settings={settings}
-        soundNav={settings.soundNav === '1'}
+        soundNav={settings.soundNav === '1' && !dndSession}
         onSyncReceived={handleQrSyncReceived}
         onOpenMobilePreview={(code, token) => {
           setQrSyncOpen(false);
           setMobileSyncSession({ code, token, isPreview: true });
         }}
         onClose={() => setQrSyncOpen(false)}
+        onToast={showToast}
+      />
+
+      <MapsModal
+        isOpen={mapsOpen}
+        cityName={settings.name}
+        cityLat={settings.lat}
+        cityLon={settings.lon}
+        soundNav={settings.soundNav === '1' && !dndSession}
+        dpadSpeed={settings.dpadSpeed}
+        onSelectCityLocation={(loc) => {
+          const updated = {
+            ...settings,
+            name: loc.name,
+            lat: loc.lat,
+            lon: loc.lon,
+          };
+          setSettings(updated);
+          saveSettings(updated);
+          showToast(`Lokasi launcher diperbarui ke ${loc.name}`);
+        }}
+        onClose={() => setMapsOpen(false)}
+        onToast={showToast}
+      />
+
+      <GeminiChatModal
+        isOpen={chatOpen}
+        cityName={settings.name}
+        weatherSummary={
+          weather && currentWxDesc
+            ? `${Math.round(weather.current.temperature_2m)}°C, ${currentWxDesc.label}`
+            : undefined
+        }
+        extremeWeatherWarning={effectiveExtremeHazard?.warning || weatherWarning}
+        nextPrayerSummary={countdownLabel || undefined}
+        activeLeagueName={activeLeagueName}
+        soundNav={settings.soundNav === '1' && !dndSession}
+        dpadSpeed={settings.dpadSpeed}
+        onBroadcastReply={(text) => {
+          const clean = text.replace(/\s+/g, ' ').trim();
+          setCustomChatBroadcast({
+            headline: `Siaran Asisten AI (${settings.name})`,
+            tickerText: clean,
+            advice: '',
+            model: 'gemini-4-hydrogen',
+            cityName: settings.name,
+            warningTitle: effectiveExtremeHazard?.warning.title || 'Pesan Siaran AI',
+            generatedAt: new Date().toISOString(),
+            isSimulated: false,
+          });
+          setChatOpen(false);
+          showToast('Pesan asisten AI ditampilkan sebagai teks berjalan di bagian bawah layar');
+        }}
+        onClose={() => setChatOpen(false)}
+      />
+
+      <MusicStudioModal
+        isOpen={musicOpen}
+        soundNav={settings.soundNav === '1' && !dndSession}
+        dpadSpeed={settings.dpadSpeed}
+        onClose={() => setMusicOpen(false)}
+        onToast={showToast}
+      />
+
+      <OrbitSentinelGame
+        isOpen={gameOpen}
+        initialMuted={settings.soundNav === '0' || Boolean(dndSession)}
+        onExit={() => setGameOpen(false)}
+      />
+
+      <HaramainLiveModal
+        isOpen={haramainOpen}
+        initialCity={haramainInitialCity}
+        soundNav={settings.soundNav === '1' && !dndSession}
+        dpadSpeed={settings.dpadSpeed}
+        onClose={() => setHaramainOpen(false)}
         onToast={showToast}
       />
 

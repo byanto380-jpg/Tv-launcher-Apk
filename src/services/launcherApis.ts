@@ -1,11 +1,16 @@
 import type {
   DailyPrayerEntry,
+  DashboardCardConfig,
+  DashboardCardId,
   DayWeatherWarning,
   DpadSpeed,
+  EmergencyBroadcast,
   FootballMatch,
   GeoCityResult,
+  HaramainChannelStream,
   HijriDateInfo,
   LauncherSettings,
+  LiveWallpaperFilter,
   LiveWallpaperItem,
   LiveWallpaperTheme,
   NewsCategory,
@@ -15,6 +20,8 @@ import type {
   ScreenSaverPhoto,
   TimeThemeMode,
   TimeThemePhase,
+  TvChannelInfo,
+  TvScheduleResponse,
   WeatherData,
   WeatherWarning,
 } from '../types/launcher';
@@ -30,10 +37,19 @@ export const DEFAULT_SETTINGS: LauncherSettings = {
   soundNav: '1',
   dpadSpeed: 'normal',
   favoriteApps: [],
+  favoriteTvChannels: ['rcti', 'sctv', 'indosiar', 'trans7', 'transtv'],
   liveWallpaper: '0',
   liveWallpaperTheme: 'clouds',
+  liveWallpaperFilter: 'none',
   themeMode: 'auto',
   screenSaver: '1',
+  autoSilent: '1',
+  autoSilentDurationMin: 15,
+  dashboardCards: [
+    { id: 'prayer', visible: true },
+    { id: 'schedule', visible: true },
+    { id: 'weather', visible: true },
+  ],
   apps: [
     'YouTube TV|https://www.youtube.com/tv',
     'Netflix|https://www.netflix.com',
@@ -42,6 +58,45 @@ export const DEFAULT_SETTINGS: LauncherSettings = {
     'Google|https://www.google.com',
   ].join('\n'),
 };
+
+export const DEFAULT_DASHBOARD_CARDS: DashboardCardConfig[] = [
+  { id: 'prayer', visible: true },
+  { id: 'schedule', visible: true },
+  { id: 'weather', visible: true },
+];
+
+export function normalizeDashboardCards(raw: unknown): DashboardCardConfig[] {
+  const validIds: DashboardCardId[] = ['prayer', 'schedule', 'weather'];
+  const result: DashboardCardConfig[] = [];
+  const seen = new Set<DashboardCardId>();
+
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      if (!item || typeof item !== 'object') continue;
+      const obj = item as { id?: unknown; visible?: unknown };
+      if (
+        (obj.id === 'prayer' || obj.id === 'schedule' || obj.id === 'weather') &&
+        !seen.has(obj.id)
+      ) {
+        seen.add(obj.id);
+        result.push({
+          id: obj.id,
+          visible: obj.visible !== false,
+        });
+      }
+    }
+  }
+
+  for (const id of validIds) {
+    if (!seen.has(id)) {
+      result.push({ id, visible: true });
+    }
+  }
+
+  return result;
+}
+
+export const AUTO_SILENT_DURATION_OPTIONS = [10, 15, 20, 30] as const;
 
 export const PRAYER_LABELS: Record<'Fajr' | 'Dhuhr' | 'Asr' | 'Maghrib' | 'Isha', string> = {
   Fajr: 'Subuh',
@@ -72,6 +127,58 @@ export const FOOTBALL_LEAGUES = [
   { value: '4480', label: 'UEFA Champions League' },
 ];
 
+export const INDONESIAN_TV_CHANNELS: TvChannelInfo[] = [
+  { id: 'rcti', name: 'RCTI' },
+  { id: 'sctv', name: 'SCTV' },
+  { id: 'indosiar', name: 'Indosiar' },
+  { id: 'trans7', name: 'Trans7' },
+  { id: 'transtv', name: 'Trans TV' },
+  { id: 'mnctv', name: 'MNCTV' },
+  { id: 'gtv', name: 'GTV' },
+  { id: 'antv', name: 'ANTV' },
+  { id: 'kompastv', name: 'Kompas TV' },
+  { id: 'metrotv', name: 'Metro TV' },
+  { id: 'tvone', name: 'tvOne' },
+  { id: 'inewstv', name: 'iNews' },
+  { id: 'rtv', name: 'RTV' },
+  { id: 'moji', name: 'Moji' },
+  { id: 'nettv', name: 'NET.' },
+  { id: 'tvri', name: 'TVRI' },
+];
+
+export const HARAMAIN_STREAMS: HaramainChannelStream[] = [
+  {
+    id: 'makkah',
+    city: 'Makkah Al-Mukarramah',
+    mosque: 'Masjidil Haram',
+    channelName: 'Saudi Quran TV (Al-Quran Al-Kareem)',
+    arabicTitle: 'قناة القرآن الكريم · بث مباشر',
+    description: 'Siaran langsung 24 jam Masjidil Haram & Ka’bah',
+    hlsUrl: 'https://cdn-globecast.akamaized.net/live/eds/saudi_quran/hls_roku/index.m3u8',
+    youtubeChannelId: 'UCos52azQNBgW63_9uDJoPDA',
+    youtubeEmbedUrl:
+      'https://www.youtube.com/embed/live_stream?channel=UCos52azQNBgW63_9uDJoPDA&autoplay=1&rel=0',
+    lat: 21.4225,
+    lon: 39.8262,
+    tz: 'Asia/Riyadh',
+  },
+  {
+    id: 'madinah',
+    city: 'Madinah Al-Munawwarah',
+    mosque: 'Masjid Nabawi',
+    channelName: 'Saudi Sunnah TV (Al-Sunnah Al-Nabawiyah)',
+    arabicTitle: 'قناة السنة النبوية · بث مباشر',
+    description: 'Siaran langsung 24 jam Masjid Nabawi',
+    hlsUrl: 'https://cdn-globecast.akamaized.net/live/eds/saudi_sunnah/hls_roku/index.m3u8',
+    youtubeChannelId: 'UCROKYPep-UuODNwyipe6JMw',
+    youtubeEmbedUrl:
+      'https://www.youtube.com/embed/live_stream?channel=UCROKYPep-UuODNwyipe6JMw&autoplay=1&rel=0',
+    lat: 24.4672,
+    lon: 39.6111,
+    tz: 'Asia/Riyadh',
+  },
+];
+
 export const LIVE_WALLPAPER_THEMES: Array<{
   value: LiveWallpaperTheme;
   label: string;
@@ -80,6 +187,15 @@ export const LIVE_WALLPAPER_THEMES: Array<{
   { value: 'ocean', label: 'Ombak & Laut Tenang (Wikimedia Commons)' },
   { value: 'aurora', label: 'Aurora & Langit Malam (Wikimedia Commons)' },
   { value: 'cosmos', label: 'Bumi dari Orbit (NASA Open Video)' },
+];
+
+export const LIVE_WALLPAPER_FILTERS: Array<{
+  value: LiveWallpaperFilter;
+  label: string;
+}> = [
+  { value: 'none', label: 'Normal (Warna Asli)' },
+  { value: 'monochrome', label: 'Monokrom (Hitam Putih Elegan)' },
+  { value: 'sepia', label: 'Sepia (Hangat Klasik)' },
 ];
 
 export const THEME_MODE_OPTIONS: Array<{
@@ -186,12 +302,21 @@ export function loadSettings(): LauncherSettings {
       ...DEFAULT_SETTINGS,
       ...parsed,
       favoriteApps: Array.isArray(parsed?.favoriteApps) ? parsed.favoriteApps : [],
+      favoriteTvChannels:
+        Array.isArray(parsed?.favoriteTvChannels) && parsed.favoriteTvChannels.length > 0
+          ? parsed.favoriteTvChannels.filter((x: unknown): x is string => typeof x === 'string')
+          : DEFAULT_SETTINGS.favoriteTvChannels,
       liveWallpaper: parsed?.liveWallpaper === '1' ? '1' : '0',
       liveWallpaperTheme: ['clouds', 'ocean', 'aurora', 'cosmos'].includes(
         parsed?.liveWallpaperTheme
       )
         ? parsed.liveWallpaperTheme
         : DEFAULT_SETTINGS.liveWallpaperTheme,
+      liveWallpaperFilter: ['none', 'monochrome', 'sepia'].includes(
+        parsed?.liveWallpaperFilter
+      )
+        ? parsed.liveWallpaperFilter
+        : DEFAULT_SETTINGS.liveWallpaperFilter,
       themeMode: ['auto', 'dawn', 'day', 'night'].includes(parsed?.themeMode)
         ? parsed.themeMode
         : DEFAULT_SETTINGS.themeMode,
@@ -199,6 +324,13 @@ export function loadSettings(): LauncherSettings {
         ? parsed.dpadSpeed
         : DEFAULT_SETTINGS.dpadSpeed,
       screenSaver: parsed?.screenSaver === '0' ? '0' : '1',
+      autoSilent: parsed?.autoSilent === '0' ? '0' : '1',
+      autoSilentDurationMin: AUTO_SILENT_DURATION_OPTIONS.includes(
+        Number(parsed?.autoSilentDurationMin) as (typeof AUTO_SILENT_DURATION_OPTIONS)[number]
+      )
+        ? Number(parsed.autoSilentDurationMin)
+        : DEFAULT_SETTINGS.autoSilentDurationMin,
+      dashboardCards: normalizeDashboardCards(parsed?.dashboardCards),
     };
   } catch {
     return { ...DEFAULT_SETTINGS };
@@ -404,6 +536,19 @@ export async function fetchPrayerTimes(settings: LauncherSettings): Promise<Pray
   return cached;
 }
 
+export async function fetchHaramainPrayerTimes(
+  stream: HaramainChannelStream
+): Promise<PrayerTimings | null> {
+  return fetchPrayerTimes({
+    ...DEFAULT_SETTINGS,
+    name: stream.city,
+    lat: stream.lat,
+    lon: stream.lon,
+    tz: stream.tz,
+    method: '4', // Umm al-Qura (Makkah)
+  });
+}
+
 export async function fetchPrayerSchedule(
   settings: LauncherSettings
 ): Promise<PrayerScheduleResult> {
@@ -510,6 +655,28 @@ export async function fetchWeather(settings: LauncherSettings): Promise<WeatherD
   }
 }
 
+export async function fetchEmergencyBroadcast(payload: {
+  cityName: string;
+  warningTitle: string;
+  warningDetail: string;
+  conditionLabel?: string;
+  temperatureC?: number;
+  windKmh?: number;
+  precipMm?: number;
+  isSimulated?: boolean;
+}): Promise<EmergencyBroadcast> {
+  const res = await fetch('/api/emergency-broadcast', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = (await res.json()) as EmergencyBroadcast & { error?: string };
+  if (!res.ok) {
+    throw new Error(data.error || 'Gagal menyusun Pesan Siaran darurat dari asisten AI.');
+  }
+  return data;
+}
+
 export async function fetchFootballMatches(leagueId: string): Promise<FootballMatch[]> {
   const key = `mt-${leagueId}`;
   const cached = readCache<{ events?: FootballMatch[] }>(key);
@@ -522,6 +689,28 @@ export async function fetchFootballMatches(leagueId: string): Promise<FootballMa
     return json.events || [];
   } catch {
     return cached?.events || [];
+  }
+}
+
+export async function fetchTvSchedules(
+  channelIds: string[]
+): Promise<TvScheduleResponse> {
+  const safeIds = channelIds.length > 0 ? channelIds.slice(0, 8) : ['rcti', 'sctv'];
+  const key = `tvsched-${safeIds.join(',')}`;
+  const cached = readCache<TvScheduleResponse>(key);
+  try {
+    const res = await fetch(
+      `/api/tv-schedule?channels=${encodeURIComponent(safeIds.join(','))}`
+    );
+    if (!res.ok) throw new Error('TV schedule fetch error');
+    const json = (await res.json()) as TvScheduleResponse;
+    if (Array.isArray(json.channels) && json.channels.length > 0) {
+      writeCache(key, json);
+      return json;
+    }
+    return cached || { updatedAt: new Date().toISOString(), channels: [] };
+  } catch {
+    return cached || { updatedAt: new Date().toISOString(), channels: [] };
   }
 }
 

@@ -43,13 +43,14 @@
   }
 }
 
-/* 10-Foot Android TV Remote Control Focus Styling */
+/* 10-Foot Android TV Remote Control Focus & Hover Styling */
 [data-focusable="true"] {
   transition:
-    transform 160ms cubic-bezier(0.16, 1, 0.3, 1),
-    background-color 160ms cubic-bezier(0.16, 1, 0.3, 1),
-    border-color 160ms cubic-bezier(0.16, 1, 0.3, 1),
-    box-shadow 160ms cubic-bezier(0.16, 1, 0.3, 1);
+    transform 180ms cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 180ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 180ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 180ms cubic-bezier(0.16, 1, 0.3, 1),
+    color 180ms cubic-bezier(0.16, 1, 0.3, 1);
   outline: none;
 }
 
@@ -57,30 +58,135 @@
   0%,
   100% {
     box-shadow:
-      0 0 0 6px rgba(var(--tv-focus-rgb), 0.2),
-      0 0 18px 2px rgba(var(--tv-focus-rgb), 0.24),
+      0 0 0 5px rgba(var(--tv-focus-rgb), 0.24),
+      0 0 18px 2px rgba(var(--tv-focus-rgb), 0.28),
       0 12px 28px -8px rgba(0, 0, 0, 0.65);
   }
   50% {
     box-shadow:
-      0 0 0 9px rgba(var(--tv-focus-rgb), 0.36),
-      0 0 30px 6px rgba(var(--tv-focus-rgb), 0.44),
+      0 0 0 8px rgba(var(--tv-focus-rgb), 0.4),
+      0 0 30px 6px rgba(var(--tv-focus-rgb), 0.48),
       0 12px 28px -8px rgba(0, 0, 0, 0.65);
   }
+}
+
+[data-focusable="true"]:hover:not(:focus) {
+  transform: translateY(-1px) scale(1.018);
+  border-color: rgba(var(--tv-focus-rgb), 0.6);
+  box-shadow:
+    0 0 0 3px rgba(var(--tv-focus-rgb), 0.14),
+    0 10px 22px -8px rgba(0, 0, 0, 0.6);
 }
 
 [data-focusable="true"]:focus {
   outline: 3px solid var(--tv-focus-hex);
   outline-offset: 2px;
-  transform: scale(1.03);
+  transform: translateY(-1px) scale(1.03);
   box-shadow:
-    0 0 0 6px rgba(var(--tv-focus-rgb), 0.2),
+    0 0 0 5px rgba(var(--tv-focus-rgb), 0.24),
+    0 0 18px 2px rgba(var(--tv-focus-rgb), 0.28),
     0 12px 28px -8px rgba(0, 0, 0, 0.65);
-  animation: tv-focus-outer-glow 2.4s ease-in-out 3s infinite;
+  animation: tv-focus-outer-glow 2.2s ease-in-out 0.4s infinite;
   z-index: 10;
 }
 
+[data-focusable="true"]:active {
+  transform: scale(0.985);
+}
+
+/* Interactive Dashboard Cards (D-Pad Focus-Within & Hover Illumination) */
+.tv-dashboard-card {
+  position: relative;
+  transition:
+    transform 240ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 240ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 240ms cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 700ms ease;
+}
+
+.tv-dashboard-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 18%;
+  right: 18%;
+  height: 2px;
+  border-radius: 9999px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(var(--tv-focus-rgb), 0.95),
+    transparent
+  );
+  opacity: 0;
+  transform: scaleX(0.45);
+  transition:
+    opacity 240ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 260ms cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
+}
+
+.tv-dashboard-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(var(--tv-focus-rgb), 0.55);
+  box-shadow:
+    0 0 0 1px rgba(var(--tv-focus-rgb), 0.2),
+    0 18px 38px -14px rgba(var(--tv-focus-rgb), 0.26),
+    0 12px 26px -10px rgba(0, 0, 0, 0.68);
+}
+
+.tv-dashboard-card:hover::before {
+  opacity: 0.75;
+  transform: scaleX(0.85);
+}
+
+.tv-dashboard-card:focus-within {
+  transform: translateY(-3px) scale(1.006);
+  border-color: rgba(var(--tv-focus-rgb), 0.85);
+  box-shadow:
+    0 0 0 1px rgba(var(--tv-focus-rgb), 0.38),
+    0 20px 44px -14px rgba(var(--tv-focus-rgb), 0.36),
+    0 14px 32px -10px rgba(0, 0, 0, 0.74);
+  z-index: 5;
+}
+
+.tv-dashboard-card:focus-within::before {
+  opacity: 1;
+  transform: scaleX(1);
+}
+
+.tv-card-focus-dot {
+  background-color: var(--tv-focus-hex);
+  box-shadow: 0 0 10px 2px rgba(var(--tv-focus-rgb), 0.65);
+  opacity: 0;
+  transform: scale(0.4);
+  transition:
+    opacity 200ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.tv-dashboard-card:hover .tv-card-focus-dot {
+  opacity: 0.55;
+  transform: scale(0.85);
+}
+
+.tv-dashboard-card:focus-within .tv-card-focus-dot {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.tv-dashboard-card:hover .tv-card-title,
+.tv-dashboard-card:focus-within .tv-card-title {
+  color: #ffffff;
+}
+
 /* Inputs & selects inside settings get clear TV focus without excessive scaling */
+input[data-focusable="true"]:hover:not(:focus),
+select[data-focusable="true"]:hover:not(:focus),
+textarea[data-focusable="true"]:hover:not(:focus) {
+  transform: scale(1.005);
+}
+
 input[data-focusable="true"]:focus,
 select[data-focusable="true"]:focus,
 textarea[data-focusable="true"]:focus {
@@ -119,6 +225,66 @@ textarea[data-focusable="true"]:focus {
   animation: tv-ken-burns 14s ease-out forwards;
 }
 
+/* Smooth Weather Icon Transition on Forecast Refresh */
+@keyframes tv-weather-icon-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.76) rotate(-8deg);
+  }
+  65% {
+    opacity: 1;
+    transform: translateY(-1px) scale(1.08) rotate(2deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1) rotate(0deg);
+  }
+}
+
+.tv-weather-icon-enter {
+  animation: tv-weather-icon-enter 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, opacity;
+}
+
+.tv-weather-stagger-0 {
+  animation-delay: 0ms;
+}
+.tv-weather-stagger-1 {
+  animation-delay: 55ms;
+}
+.tv-weather-stagger-2 {
+  animation-delay: 110ms;
+}
+.tv-weather-stagger-3 {
+  animation-delay: 165ms;
+}
+.tv-weather-stagger-4 {
+  animation-delay: 220ms;
+}
+
+/* Emergency Broadcast Bottom Running Text (Pesan Siaran AI) */
+@keyframes tv-broadcast-marquee {
+  0% {
+    transform: translate3d(0%, 0, 0);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.tv-broadcast-track {
+  display: inline-flex;
+  align-items: center;
+  width: max-content;
+  will-change: transform;
+  animation: tv-broadcast-marquee 28s linear infinite;
+}
+
+.tv-broadcast-bar:hover .tv-broadcast-track,
+.tv-broadcast-bar:focus-within .tv-broadcast-track {
+  animation-play-state: paused;
+}
+
 /* Hide scrollbars on TV horizontal rails while preserving programmatic scroll */
 .no-scrollbar {
   scrollbar-width: none;
@@ -129,10 +295,17 @@ textarea[data-focusable="true"]:focus {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  [data-focusable="true"] {
+  [data-focusable="true"],
+  .tv-dashboard-card,
+  .tv-dashboard-card::before,
+  .tv-card-focus-dot {
     transition: none;
   }
-  [data-focusable="true"]:focus {
+  [data-focusable="true"]:hover:not(:focus),
+  [data-focusable="true"]:focus,
+  [data-focusable="true"]:active,
+  .tv-dashboard-card:hover,
+  .tv-dashboard-card:focus-within {
     transform: none;
     animation: none;
   }
@@ -141,5 +314,12 @@ textarea[data-focusable="true"]:focus {
   }
   .tv-ken-burns {
     animation: none;
+  }
+  .tv-weather-icon-enter {
+    animation: none;
+  }
+  .tv-broadcast-track {
+    animation: none;
+    width: 100%;
   }
 }

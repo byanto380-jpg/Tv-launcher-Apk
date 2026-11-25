@@ -21,8 +21,18 @@ function buildStandaloneHtml(settings: LauncherSettings, config: ApkBuildConfig)
   const safeFavoriteApps = JSON.stringify(settings.favoriteApps || []);
   const safeLiveWallpaper = JSON.stringify(settings.liveWallpaper || '0');
   const safeLiveTheme = JSON.stringify(settings.liveWallpaperTheme || 'clouds');
+  const safeLiveFilter = JSON.stringify(settings.liveWallpaperFilter || 'none');
   const safeThemeMode = JSON.stringify(settings.themeMode || 'auto');
   const safeScreenSaver = JSON.stringify(settings.screenSaver === '0' ? '0' : '1');
+  const safeAutoSilent = JSON.stringify(settings.autoSilent === '0' ? '0' : '1');
+  const safeAutoSilentDur = Number(settings.autoSilentDurationMin) || 15;
+  const safeDashboardCards = JSON.stringify(
+    settings.dashboardCards || [
+      { id: 'prayer', visible: true },
+      { id: 'schedule', visible: true },
+      { id: 'weather', visible: true },
+    ]
+  );
   const safeApps = JSON.stringify(settings.apps);
   const includeSys = config.includeSystemShortcuts ? 'true' : 'false';
 
@@ -49,9 +59,11 @@ body{
 }
 #liveBg{
   position:fixed;inset:0;width:100%;height:100%;object-fit:cover;
-  opacity:0;transition:opacity .7s ease;pointer-events:none;
+  opacity:0;transition:opacity .7s ease,filter .7s ease;pointer-events:none;
 }
 #liveBg.ready{opacity:1}
+#liveBg.flt-monochrome{filter:grayscale(1) contrast(1.08)}
+#liveBg.flt-sepia{filter:sepia(1) contrast(1.04) brightness(.95)}
 #shade{
   position:fixed;inset:0;
   background:linear-gradient(180deg,rgba(7,13,25,.55),rgba(7,13,25,.82));
@@ -78,6 +90,21 @@ body{
 #nowW{text-align:right;font-size:1.5vw;color:rgba(226,232,240,.85)}
 #nowW b{display:block;font-size:4vw;font-weight:400;font-variant-numeric:tabular-nums;color:#fff}
 .grid{flex:1;display:grid;grid-template-columns:1fr 1.25fr 1fr;gap:1.4vw;min-height:0}
+.grid.cols-2{grid-template-columns:1fr 1fr}
+.grid.cols-1,.grid.cols-0{grid-template-columns:1fr}
+#gridEmpty{display:none;flex-direction:column;align-items:center;justify-content:center;gap:1.5vh;background:var(--tv-card-bg);border:1px solid var(--tv-card-border);border-radius:1.2vw;padding:3vw;text-align:center}
+#cardLayoutGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:1vw;margin-top:.8vh}
+.cl-cell{background:rgba(15,23,42,.82);border:1px solid rgba(148,163,184,.25);border-radius:.9vw;padding:1.2vw;display:flex;flex-direction:column;gap:.9vh;transition:border-color .15s ease,background .15s ease,transform .15s ease}
+.cl-cell.grabbed{border-color:#38bdf8;background:rgba(14,116,144,.38);box-shadow:0 0 0 3px rgba(56,189,248,.35)}
+.cl-cell.hidden-card{opacity:.55}
+.cl-meta{font-size:1vw;color:rgba(148,163,184,.85)}
+.cl-title{font-size:1.35vw;font-weight:600;color:#f8fafc}
+.cl-actions{display:flex;gap:.5vw;flex-wrap:wrap}
+.cl-actions button{padding:.55vh .8vw;font-size:1.05vw}
+@keyframes tv-card-enter{
+  0%{opacity:0;transform:translateY(18px) scale(.985)}
+  100%{opacity:1;transform:translateY(0) scale(1)}
+}
 .card{
   background:var(--tv-card-bg);
   border:1px solid var(--tv-card-border);
@@ -88,6 +115,7 @@ body{
   min-height:0;
   transition:background .7s ease,border-color .7s ease;
 }
+.card.card-enter{animation:tv-card-enter .46s cubic-bezier(.16,1,.3,1) both}
 .card h2{
   font-size:1.25vw;
   font-weight:600;
@@ -210,7 +238,7 @@ option{color:#000}
 #ssScrim{position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.18),rgba(0,0,0,.35) 55%,rgba(0,0,0,.86));pointer-events:none}
 #ssBar{position:relative;z-index:2;display:flex;justify-content:space-between;align-items:flex-end;gap:3vw;padding:4.5vh 4.5vw}
 @media(max-width:800px){
-  body{overflow:auto}#app{height:auto}.grid{grid-template-columns:1fr}
+  body{overflow:auto}#app{height:auto}.grid,.grid.cols-2,.grid.cols-1,#cardLayoutGrid{grid-template-columns:1fr}
   #clock{font-size:16vw}#date,#nowW,.row,.match,.day,.card h2,#cd,button,.btn,.f,input,select,textarea,.muted{font-size:3.8vw}
   #nowW b{font-size:11vw}.match small{font-size:3vw}#set h1{font-size:6.5vw}
   .pwr-box{width:92vw}.pwr-grid{grid-template-columns:1fr}
@@ -233,8 +261,8 @@ option{color:#000}
     </div>
   </div>
 
-  <div class="grid">
-    <div class="card">
+  <div class="grid" id="tvGrid">
+    <div class="card" data-card-id="prayer">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.8vw;margin-bottom:.8vh">
         <div>
           <h2 style="margin-bottom:.3vh">Waktu Sholat</h2>
@@ -249,15 +277,24 @@ option{color:#000}
         <div id="cd"></div>
         <div id="prayViz" aria-label="Audio Visualizer"><span></span><span></span><span></span><span></span><span></span></div>
       </div>
+      <div id="dndBar" style="display:none;align-items:center;justify-content:space-between;gap:.8vw;background:rgba(139,92,246,.2);border:1px solid rgba(167,139,250,.45);border-radius:.65vw;padding:.55vh .8vw;margin-bottom:.7vh;font-size:1.05vw;color:#ede9fe">
+        <span id="dndText">Mode Hening (DND) Aktif</span>
+        <button id="dndEnd" data-focusable="true" data-dpad-row="cards" style="padding:.3vh .7vw;font-size:.95vw">Akhiri</button>
+      </div>
       <div class="scroll-body" id="pray"><div class="muted">Memuat…</div></div>
     </div>
-    <div class="card">
+    <div class="card" data-card-id="schedule">
       <h2>Jadwal Pertandingan</h2>
       <div class="scroll-body" id="match"><div class="muted">Memuat…</div></div>
     </div>
-    <div class="card">
+    <div class="card" data-card-id="weather">
       <h2>Prakiraan Cuaca</h2>
       <div class="scroll-body" id="wx"><div class="muted">Memuat…</div></div>
+    </div>
+    <div id="gridEmpty">
+      <div style="font-size:1.8vw;font-weight:500">Semua kartu dashboard disembunyikan</div>
+      <div class="muted">Aktifkan kembali kartu Sholat, Jadwal, atau Cuaca melalui menu Pengaturan.</div>
+      <button id="emptyOpenSet" data-focusable="true" data-dpad-row="cards">Buka Pengaturan</button>
     </div>
   </div>
 
@@ -352,6 +389,13 @@ option{color:#000}
       <option value="4480">Champions League</option>
     </select>
   </div>
+  <div class="f">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:1vw;flex-wrap:wrap;margin-bottom:.7vh">
+      <label style="margin:0">Tata Letak &amp; Visibilitas Kartu Dashboard (OK/Enter untuk geser dengan panah D-pad, atau seret)</label>
+      <button id="cardLayoutReset" type="button" data-focusable="true" style="padding:.55vh 1vw;font-size:1.1vw">Reset Urutan</button>
+    </div>
+    <div id="cardLayoutGrid"></div>
+  </div>
   <div class="f"><label>Tema warna otomatis berdasarkan waktu hari</label>
     <select id="themeMode" data-focusable="true">
       <option value="auto">Otomatis (Fajar · Siang · Malam)</option>
@@ -369,6 +413,11 @@ option{color:#000}
         <option value="aurora">Aurora &amp; Langit Malam</option>
         <option value="cosmos">Bumi dari Orbit (NASA)</option>
       </select>
+      <select id="liveFilter" data-focusable="true">
+        <option value="none">Filter: Normal</option>
+        <option value="monochrome">Filter: Monokrom</option>
+        <option value="sepia">Filter: Sepia</option>
+      </select>
     </div>
   </div>
   <div class="f"><label>Screen Saver (Galeri foto pemandangan acak setelah 5 menit tidak aktif)</label>
@@ -385,6 +434,18 @@ option{color:#000}
       <select id="adzan" data-focusable="true"><option value="1">Aktif</option><option value="0">Nonaktif</option></select>
       <input type="file" id="adzanFile" data-focusable="true" accept="audio/*">
       <button id="adzanTest" data-focusable="true">Tes Suara</button>
+    </div>
+  </div>
+  <div class="f"><label>Auto-Silent (Mode Hening / DND otomatis saat waktu sholat tiba)</label>
+    <div style="display:flex;gap:1vw;align-items:center;flex-wrap:wrap">
+      <select id="autoSilent" data-focusable="true"><option value="1">Aktif</option><option value="0">Nonaktif</option></select>
+      <select id="autoSilentDur" data-focusable="true">
+        <option value="10">10 menit</option>
+        <option value="15">15 menit</option>
+        <option value="20">20 menit</option>
+        <option value="30">30 menit</option>
+      </select>
+      <button id="dndPermBtn" data-focusable="true" style="display:none">Izin DND TV Box</button>
     </div>
   </div>
   <div class="f"><label>Suara klik navigasi remote</label>
@@ -414,14 +475,34 @@ const $=id=>document.getElementById(id);
 const DEF={
   name:${safeName},lat:${settings.lat},lon:${settings.lon},tz:${safeTz},
   method:${safeMethod},league:${safeLeague},adzan:${safeAdzan},soundNav:${safeSoundNav},dpadSpeed:${safeDpadSpeed},
-  favoriteApps:${safeFavoriteApps},liveWallpaper:${safeLiveWallpaper},liveWallpaperTheme:${safeLiveTheme},themeMode:${safeThemeMode},screenSaver:${safeScreenSaver},apps:${safeApps}
+  favoriteApps:${safeFavoriteApps},liveWallpaper:${safeLiveWallpaper},liveWallpaperTheme:${safeLiveTheme},liveWallpaperFilter:${safeLiveFilter},themeMode:${safeThemeMode},screenSaver:${safeScreenSaver},autoSilent:${safeAutoSilent},autoSilentDurationMin:${safeAutoSilentDur},dashboardCards:${safeDashboardCards},apps:${safeApps}
 };
+const DEF_CARDS=[{id:'prayer',visible:true},{id:'schedule',visible:true},{id:'weather',visible:true}];
+const CARD_META={prayer:{t:'Sholat',d:'Jadwal adzan & hitung mundur'},schedule:{t:'Jadwal',d:'Pertandingan & jadwal TV'},weather:{t:'Cuaca',d:'Prakiraan cuaca & peringatan'}};
+function normalizeDashboardCards(raw){
+  const seen={};const out=[];
+  if(Array.isArray(raw)){
+    raw.forEach(item=>{
+      if(item&&CARD_META[item.id]&&!seen[item.id]){
+        seen[item.id]=true;
+        out.push({id:item.id,visible:item.visible!==false});
+      }
+    });
+  }
+  DEF_CARDS.forEach(d=>{if(!seen[d.id])out.push({id:d.id,visible:d.visible})});
+  return out;
+}
 let S=Object.assign({},DEF);
 try{Object.assign(S,JSON.parse(localStorage.getItem('tvl')||'{}'))}catch(e){}
 if(!Array.isArray(S.favoriteApps))S.favoriteApps=[];
 if(!['auto','dawn','day','night'].includes(S.themeMode))S.themeMode='auto';
+if(!['none','monochrome','sepia'].includes(S.liveWallpaperFilter))S.liveWallpaperFilter='none';
 if(!['slow','normal','fast'].includes(S.dpadSpeed))S.dpadSpeed='normal';
 if(S.screenSaver!=='0')S.screenSaver='1';
+if(S.autoSilent!=='0')S.autoSilent='1';
+if(![10,15,20,30].includes(Number(S.autoSilentDurationMin)))S.autoSilentDurationMin=15;
+S.dashboardCards=normalizeDashboardCards(S.dashboardCards);
+let draftCards=normalizeDashboardCards(S.dashboardCards),grabbedCardId=null,dragCardId=null;
 let favEdit=false;
 const save=()=>{try{localStorage.setItem('tvl',JSON.stringify(S))}catch(e){}};
 const j=async u=>{const r=await fetch(u);if(!r.ok)throw 0;return r.json()};
@@ -430,8 +511,15 @@ const cache=(k,v)=>{try{if(v===undefined)return JSON.parse(localStorage.getItem(
 /* Wallpaper & Live Wallpaper */
 const LVQ={clouds:'clouds timelapse sky webm',ocean:'ocean waves sea calm webm',aurora:'aurora borealis timelapse webm'};
 let LVLIST=[],LVIDX=0;
+function applyLiveFilter(){
+  const v=$('liveBg');if(!v)return;
+  v.classList.remove('flt-monochrome','flt-sepia');
+  if(S.liveWallpaperFilter==='monochrome')v.classList.add('flt-monochrome');
+  else if(S.liveWallpaperFilter==='sepia')v.classList.add('flt-sepia');
+}
 async function loadLiveWP(){
   const v=$('liveBg');if(!v)return;
+  applyLiveFilter();
   if(S.liveWallpaper!=='1'){v.pause();v.removeAttribute('src');v.classList.remove('ready');v.load();return}
   const theme=S.liveWallpaperTheme||'clouds',ck='livewp-'+theme;
   let list=cache(ck)||[];
@@ -701,20 +789,149 @@ function renderFavSettings(){
   });
 }
 
+function applyDashboardCards(){
+  const grid=$('tvGrid');if(!grid)return;
+  const list=normalizeDashboardCards(S.dashboardCards);
+  let visCount=0;
+  list.forEach(c=>{
+    const el=grid.querySelector('[data-card-id="'+c.id+'"]');
+    if(!el)return;
+    grid.appendChild(el);
+    el.style.display=c.visible?'flex':'none';
+    el.classList.remove('card-enter');
+    if(c.visible){
+      el.style.animationDelay=(visCount*110)+'ms';
+      void el.offsetWidth;
+      el.classList.add('card-enter');
+      visCount++;
+    }
+  });
+  const empty=$('gridEmpty');
+  if(empty){
+    grid.appendChild(empty);
+    empty.style.display=visCount===0?'flex':'none';
+  }
+  grid.className='grid cols-'+visCount;
+}
+if($('emptyOpenSet'))$('emptyOpenSet').onclick=openSet;
+function swapDraftCard(fromId,toId){
+  if(!fromId||!toId||fromId===toId)return;
+  const fi=draftCards.findIndex(x=>x.id===fromId),ti=draftCards.findIndex(x=>x.id===toId);
+  if(fi<0||ti<0)return;
+  const tmp=draftCards[fi];draftCards[fi]=draftCards[ti];draftCards[ti]=tmp;
+}
+function renderCardLayoutSettings(refocusId){
+  const box=$('cardLayoutGrid');if(!box)return;
+  box.innerHTML='';
+  draftCards.forEach((c,idx)=>{
+    const m=CARD_META[c.id];
+    const isGrab=grabbedCardId===c.id;
+    const cell=document.createElement('div');
+    cell.className='cl-cell'+(isGrab?' grabbed':'')+(c.visible?'':' hidden-card');
+    cell.draggable=true;
+    cell.ondragstart=e=>{dragCardId=c.id;if(e.dataTransfer){e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',c.id)}};
+    cell.ondragover=e=>{e.preventDefault();if(dragCardId&&dragCardId!==c.id){swapDraftCard(dragCardId,c.id);renderCardLayoutSettings()}};
+    cell.ondrop=e=>{e.preventDefault();dragCardId=null;renderCardLayoutSettings()};
+    cell.ondragend=()=>{dragCardId=null};
+
+    const meta=document.createElement('div');
+    meta.className='cl-meta';
+    meta.textContent='Kolom '+(idx+1)+' · '+(c.visible?'Tampil':'Disembunyikan');
+
+    const title=document.createElement('div');
+    title.className='cl-title';
+    title.textContent=m.t;
+
+    const desc=document.createElement('div');
+    desc.className='cl-meta';
+    desc.textContent=m.d;
+
+    const acts=document.createElement('div');
+    acts.className='cl-actions';
+
+    const grabBtn=document.createElement('button');
+    grabBtn.type='button';
+    grabBtn.dataset.focusable='true';
+    grabBtn.dataset.cardGrab=c.id;
+    grabBtn.textContent=isGrab?'Digeser (Panah)':'Geser Urutan';
+    grabBtn.onclick=()=>{
+      grabbedCardId=isGrab?null:c.id;
+      renderCardLayoutSettings(c.id);
+    };
+
+    const visBtn=document.createElement('button');
+    visBtn.type='button';
+    visBtn.dataset.focusable='true';
+    visBtn.dataset.cardVis=c.id;
+    visBtn.textContent=c.visible?'Sembunyikan':'Tampilkan';
+    visBtn.onclick=()=>{
+      draftCards[idx]={id:c.id,visible:!c.visible};
+      renderCardLayoutSettings();
+      const vb=box.querySelector('[data-card-vis="'+c.id+'"]');vb&&vb.focus();
+    };
+
+    acts.appendChild(grabBtn);acts.appendChild(visBtn);
+    cell.appendChild(meta);cell.appendChild(title);cell.appendChild(desc);cell.appendChild(acts);
+    box.appendChild(cell);
+  });
+  if(refocusId){
+    const target=box.querySelector('[data-card-grab="'+refocusId+'"]');
+    target&&target.focus();
+  }
+}
+if($('cardLayoutReset'))$('cardLayoutReset').onclick=()=>{
+  draftCards=normalizeDashboardCards(DEF_CARDS);
+  grabbedCardId=null;
+  renderCardLayoutSettings();
+};
+document.addEventListener('keydown',e=>{
+  if(!$('set').classList.contains('on')||!grabbedCardId)return;
+  const idx=draftCards.findIndex(x=>x.id===grabbedCardId);
+  if(idx<0){grabbedCardId=null;return}
+  if(e.key==='ArrowLeft'||e.key==='ArrowUp'){
+    e.preventDefault();e.stopPropagation();
+    if(idx>0){
+      const id=grabbedCardId;
+      swapDraftCard(id,draftCards[idx-1].id);
+      renderCardLayoutSettings(id);
+      if(typeof navTick==='function')navTick();
+    }
+  }else if(e.key==='ArrowRight'||e.key==='ArrowDown'){
+    e.preventDefault();e.stopPropagation();
+    if(idx<draftCards.length-1){
+      const id=grabbedCardId;
+      swapDraftCard(id,draftCards[idx+1].id);
+      renderCardLayoutSettings(id);
+      if(typeof navTick==='function')navTick();
+    }
+  }else if(e.key==='Enter'||e.key===' '||e.key==='Escape'||e.key==='Backspace'){
+    e.preventDefault();e.stopPropagation();
+    const id=grabbedCardId;
+    grabbedCardId=null;
+    renderCardLayoutSettings(id);
+  }
+},true);
+
 /* Pengaturan */
 function openSet(){
   $('locName').textContent=S.name+' ('+S.tz+')';
   $('method').value=S.method;$('league').value=S.league;
-  $('adzan').value=S.adzan;$('soundNav').value=S.soundNav||'1';$('dpadSpeed').value=S.dpadSpeed||'normal';
+  $('adzan').value=S.adzan;$('autoSilent').value=S.autoSilent||'1';$('autoSilentDur').value=String(S.autoSilentDurationMin||15);
+  $('soundNav').value=S.soundNav||'1';$('dpadSpeed').value=S.dpadSpeed||'normal';
+  const dp=$('dndPermBtn');if(dp){dp.style.display=window.Android&&Android.requestDndPermission?'inline-flex':'none';dp.textContent=window.Android&&Android.hasDndAccess&&Android.hasDndAccess()?'Izin DND TV Aktif':'Beri Izin DND TV Box';dp.onclick=()=>{if(window.Android&&Android.requestDndPermission)Android.requestDndPermission()}}
   $('themeMode').value=S.themeMode||'auto';
-  $('liveWp').value=S.liveWallpaper||'0';$('liveTheme').value=S.liveWallpaperTheme||'clouds';
+  $('liveWp').value=S.liveWallpaper||'0';$('liveTheme').value=S.liveWallpaperTheme||'clouds';$('liveFilter').value=S.liveWallpaperFilter||'none';
   $('screenSaver').value=S.screenSaver==='0'?'0':'1';
   $('appsTxt').value=S.apps;
+  draftCards=normalizeDashboardCards(S.dashboardCards);
+  grabbedCardId=null;
+  renderCardLayoutSettings();
   renderFavSettings();
   $('set').classList.add('on');
   setTimeout(()=>$('q').focus(),60);
 }
 function closeSet(){
+  grabbedCardId=null;
   $('set').classList.remove('on');
   triggerAppFadeIn();
   setTimeout(()=>{const f=document.querySelector('#apps [data-p],#apps a,#open');f&&f.focus()},60);
@@ -734,7 +951,7 @@ $('go').onclick=async()=>{
   }catch(e){$('res').innerHTML='<span class="muted">Gagal mencari</span>'}
 };
 $('q').onkeydown=e=>{if(e.key==='Enter')$('go').click()};
-$('save').onclick=()=>{S.method=$('method').value;S.league=$('league').value;S.adzan=$('adzan').value;S.soundNav=$('soundNav').value;S.dpadSpeed=$('dpadSpeed').value;S.themeMode=$('themeMode').value;S.liveWallpaper=$('liveWp').value;S.liveWallpaperTheme=$('liveTheme').value;S.screenSaver=$('screenSaver').value;S.apps=$('appsTxt').value;save();closeSet();resetSsIdle();CUR_THEME='';init()};
+$('save').onclick=()=>{S.method=$('method').value;S.league=$('league').value;S.adzan=$('adzan').value;S.autoSilent=$('autoSilent').value;S.autoSilentDurationMin=Number($('autoSilentDur').value)||15;S.soundNav=$('soundNav').value;S.dpadSpeed=$('dpadSpeed').value;S.themeMode=$('themeMode').value;S.liveWallpaper=$('liveWp').value;S.liveWallpaperTheme=$('liveTheme').value;S.liveWallpaperFilter=$('liveFilter').value;S.screenSaver=$('screenSaver').value;S.dashboardCards=normalizeDashboardCards(draftCards);S.apps=$('appsTxt').value;if(S.autoSilent==='0')endDndSession();save();closeSet();resetSsIdle();CUR_THEME='';init()};
 $('cancelSet').onclick=closeSet;
 
 let pwrTimer=null,pwrMode='awake';
@@ -879,7 +1096,7 @@ function setViz(m){
 
 /* Navigasi D-pad 2D Spatial untuk Remote TV */
 function navTick(){
-  if(S.soundNav==='0')return;
+  if(S.soundNav==='0'||dndEndsAt>Date.now())return;
   vizStart=performance.now();
   if(vizMode!=='adzan'){setViz('nav');clearTimeout(vizNavT);vizNavT=setTimeout(()=>{if(vizMode==='nav')setViz('idle')},190)}
   try{const g=getAudioGraph();if(!g)return;const o=g.c.createOscillator(),gn=g.c.createGain();
@@ -984,9 +1201,49 @@ async function playAdzan(){
 }
 $('adzanFile').onchange=async e=>{const f=e.target.files[0];if(f){try{await idbSet(f);alert('Audio adzan tersimpan')}catch(x){alert('Gagal menyimpan')}}};
 $('adzanTest').onclick=playAdzan;
-let lastAd='';
-function checkAdzan(p){if(!T||S.adzan==='0')return;const hm=String(p.hour).padStart(2,'0')+':'+p.minute;
-  for(const k of Object.keys(N)){const key=p.day+k;if(T[k].slice(0,5)===hm&&lastAd!==key){lastAd=key;playAdzan()}}}
+let lastAd='',lastSilent='',dismissedSilent='',dndEndsAt=0,dndLabel='';
+function renderDndBar(){
+  const bar=$('dndBar'),txt=$('dndText');if(!bar||!txt)return;
+  if(!dndEndsAt||Date.now()>=dndEndsAt){bar.style.display='none';return}
+  const rem=Math.max(0,Math.ceil((dndEndsAt-Date.now())/1000));
+  const mm=String(Math.floor(rem/60)).padStart(2,'0'),ss=String(rem%60).padStart(2,'0');
+  txt.textContent='Mode Hening ('+dndLabel+') · sisa '+mm+':'+ss;
+  bar.style.display='flex';
+}
+function startDndSession(lbl,ms){
+  dndLabel=lbl;dndEndsAt=Date.now()+ms;
+  if(window.Android&&Android.setDnd){try{Android.setDnd(true)}catch(e){}}
+  renderDndBar();
+}
+function endDndSession(markDismiss){
+  if(markDismiss&&lastSilent)dismissedSilent=lastSilent;
+  dndEndsAt=0;dndLabel='';
+  if(window.Android&&Android.setDnd){try{Android.setDnd(false)}catch(e){}}
+  renderDndBar();
+}
+if($('dndEnd'))$('dndEnd').onclick=()=>endDndSession(true);
+function checkAdzan(p){
+  if(dndEndsAt&&Date.now()>=dndEndsAt)endDndSession(false);
+  else if(dndEndsAt)renderDndBar();
+  if(!T)return;
+  const hm=String(p.hour).padStart(2,'0')+':'+p.minute;
+  const nowSec=(p.hour*60+ +p.minute)*60+ +p.second;
+  const durMin=Number(S.autoSilentDurationMin)||15;
+  for(const k of Object.keys(N)){
+    const tStr=(T[k]||'').slice(0,5);if(!tStr)continue;
+    const adKey=p.day+k;
+    if(S.adzan!=='0'&&tStr===hm&&lastAd!==adKey){lastAd=adKey;playAdzan()}
+    if(S.autoSilent!=='0'){
+      const[th,tm]=tStr.split(':').map(Number);
+      const startSec=(th*60+tm)*60,endSec=startSec+durMin*60;
+      const sKey=p.year+'-'+p.month+'-'+p.day+'-'+k;
+      if(nowSec>=startSec&&nowSec<endSec&&dismissedSilent!==sKey&&lastSilent!==sKey){
+        lastSilent=sKey;
+        startDndSession(N[k],endSec*1000-nowSec*1000);
+      }
+    }
+  }
+}
 
 /* News Ticker (Top 5 Tech / Sports) */
 let NCAT='tech',NLIST=[],NIDX=0;
@@ -1020,7 +1277,7 @@ $('newsCat').onclick=()=>{NCAT=NCAT==='tech'?'sports':'tech';loadNews()};
 $('newsNext').onclick=()=>{if(NLIST.length){NIDX=(NIDX+1)%NLIST.length;renderNews()}};
 setInterval(()=>{if(NLIST.length>1){NIDX=(NIDX+1)%NLIST.length;renderNews()}},6000);
 
-function init(){setWP();loadLiveWP();renderApps();loadPray();loadWx();loadMatch();loadNews();tick()}
+function init(){setWP();applyDashboardCards();loadLiveWP();renderApps();loadPray();loadWx();loadMatch();loadNews();tick()}
 init();setInterval(tick,1000);setInterval(()=>{loadPray();loadWx();loadMatch();loadNews()},30*60*1000);
 setTimeout(()=>{const a=document.querySelector('#apps [data-p],#apps a,#open');a&&a.focus()},250);
 </script>
@@ -1156,6 +1413,7 @@ dependencies {
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
     <uses-permission
         android:name="android.permission.QUERY_ALL_PACKAGES"
         tools:ignore="QueryAllPackagesPermission" />
@@ -1202,6 +1460,8 @@ ${homeCategoryXml}            </intent-filter>
     `package ${config.packageId}
 
 import android.annotation.SuppressLint
+import android.app.NotificationManager
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
@@ -1430,11 +1690,54 @@ class MainActivity : AppCompatActivity() {
         }
 
         @JavascriptInterface
+        fun hasDndAccess(): Boolean {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true
+            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+            return nm?.isNotificationPolicyAccessGranted == true
+        }
+
+        @JavascriptInterface
+        fun requestDndPermission() {
+            runOnUiThread {
+                try {
+                    val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
+                    } else {
+                        Intent(Settings.ACTION_SOUND_SETTINGS)
+                    }
+                    startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                } catch (_: Exception) {
+                    try {
+                        startActivity(Intent(Settings.ACTION_SOUND_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    } catch (_: Exception) {
+                    }
+                }
+            }
+        }
+
+        @JavascriptInterface
+        fun setDnd(enabled: Boolean): Boolean {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return false
+            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return false
+            if (!nm.isNotificationPolicyAccessGranted) return false
+            return try {
+                nm.setInterruptionFilter(
+                    if (enabled) NotificationManager.INTERRUPTION_FILTER_ALARMS
+                    else NotificationManager.INTERRUPTION_FILTER_ALL
+                )
+                true
+            } catch (_: Exception) {
+                false
+            }
+        }
+
+        @JavascriptInterface
         fun getDeviceInfo(): String {
             return JSONObject().apply {
                 put("model", Build.MODEL ?: "Android TV")
                 put("manufacturer", Build.MANUFACTURER ?: "")
                 put("sdk", Build.VERSION.SDK_INT)
+                put("dndGranted", hasDndAccess())
             }.toString()
         }
 

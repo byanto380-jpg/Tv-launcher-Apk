@@ -60,7 +60,7 @@ export const NewsTicker: React.FC<NewsTickerProps> = ({
       onMouseLeave={() => setPaused(false)}
       onFocusCapture={() => setPaused(true)}
       onBlurCapture={() => setPaused(false)}
-      className={`flex items-center gap-3 rounded-xl border px-3 py-2 backdrop-blur-sm transition-colors duration-700 ${cardClass}`}
+      className={`tv-dashboard-card flex items-center gap-3 rounded-xl border px-3 py-2 backdrop-blur-sm ${cardClass}`}
     >
       {/* Category switcher */}
       <button

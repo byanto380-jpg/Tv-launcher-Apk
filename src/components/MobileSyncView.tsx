@@ -1,7 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import {
+  ArrowDown,
   ArrowLeft,
+  ArrowUp,
+  BellOff,
   Check,
+  Eye,
+  EyeOff,
   Film,
   Image as ImageIcon,
   MapPin,
@@ -11,18 +16,22 @@ import {
   Tv,
 } from 'lucide-react';
 import {
+  AUTO_SILENT_DURATION_OPTIONS,
   DEFAULT_SETTINGS,
   DPAD_SPEED_OPTIONS,
   FOOTBALL_LEAGUES,
+  LIVE_WALLPAPER_FILTERS,
   LIVE_WALLPAPER_THEMES,
   PRAYER_METHODS,
   THEME_MODE_OPTIONS,
+  normalizeDashboardCards,
   searchCities,
 } from '../services/launcherApis';
 import type {
   DpadSpeed,
   GeoCityResult,
   LauncherSettings,
+  LiveWallpaperFilter,
   LiveWallpaperTheme,
   TimeThemeMode,
 } from '../types/launcher';
@@ -343,23 +352,43 @@ export const MobileSyncView: React.FC<MobileSyncViewProps> = ({
               </div>
 
               {draft.liveWallpaper === '1' && (
-                <select
-                  aria-label="Tema live wallpaper"
-                  value={draft.liveWallpaperTheme}
-                  onChange={(e) =>
-                    setDraft((prev) => ({
-                      ...prev,
-                      liveWallpaperTheme: e.target.value as LiveWallpaperTheme,
-                    }))
-                  }
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-sm text-white"
-                >
-                  {LIVE_WALLPAPER_THEMES.map((t) => (
-                    <option key={t.value} value={t.value}>
-                      {t.label}
-                    </option>
-                  ))}
-                </select>
+                <div className="space-y-3">
+                  <select
+                    aria-label="Tema live wallpaper"
+                    value={draft.liveWallpaperTheme}
+                    onChange={(e) =>
+                      setDraft((prev) => ({
+                        ...prev,
+                        liveWallpaperTheme: e.target.value as LiveWallpaperTheme,
+                      }))
+                    }
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-sm text-white"
+                  >
+                    {LIVE_WALLPAPER_THEMES.map((t) => (
+                      <option key={t.value} value={t.value}>
+                        {t.label}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    aria-label="Filter suasana live wallpaper"
+                    value={draft.liveWallpaperFilter || 'none'}
+                    onChange={(e) =>
+                      setDraft((prev) => ({
+                        ...prev,
+                        liveWallpaperFilter: e.target.value as LiveWallpaperFilter,
+                      }))
+                    }
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-sm text-white"
+                  >
+                    {LIVE_WALLPAPER_FILTERS.map((f) => (
+                      <option key={f.value} value={f.value}>
+                        Filter: {f.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               )}
 
               <div className="flex items-center justify-between gap-2 pt-1">
@@ -424,6 +453,55 @@ export const MobileSyncView: React.FC<MobileSyncViewProps> = ({
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="m-autosilent"
+                    className="flex items-center gap-1.5 text-xs font-medium text-slate-300"
+                  >
+                    <BellOff className="h-3.5 w-3.5 text-violet-300" />
+                    <span>Auto-Silent Sholat</span>
+                  </label>
+                  <select
+                    id="m-autosilent"
+                    value={draft.autoSilent}
+                    onChange={(e) =>
+                      setDraft((prev) => ({
+                        ...prev,
+                        autoSilent: e.target.value as '1' | '0',
+                      }))
+                    }
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+                  >
+                    <option value="1">Aktif (DND)</option>
+                    <option value="0">Nonaktif</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label htmlFor="m-autosilent-dur" className="block text-xs font-medium text-slate-300">
+                    Durasi Mode Hening
+                  </label>
+                  <select
+                    id="m-autosilent-dur"
+                    value={draft.autoSilentDurationMin}
+                    onChange={(e) =>
+                      setDraft((prev) => ({
+                        ...prev,
+                        autoSilentDurationMin: Number(e.target.value) || 15,
+                      }))
+                    }
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+                  >
+                    {AUTO_SILENT_DURATION_OPTIONS.map((mins) => (
+                      <option key={mins} value={mins}>
+                        {mins} menit
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
               <div className="space-y-1.5">
                 <label htmlFor="m-dpad-speed" className="block text-xs font-medium text-slate-300">
                   Kecepatan Navigasi D-pad (Scroll Speed)
@@ -445,6 +523,93 @@ export const MobileSyncView: React.FC<MobileSyncViewProps> = ({
                     </option>
                   ))}
                 </select>
+              </div>
+            </section>
+
+            {/* Dashboard Cards Order & Visibility */}
+            <section className="space-y-2.5 rounded-2xl border border-slate-800 bg-slate-900/85 p-4">
+              <div className="text-xs font-medium text-slate-300">
+                Urutan &amp; Tampilan Kartu Dashboard
+              </div>
+              <div className="space-y-2">
+                {normalizeDashboardCards(draft.dashboardCards).map((card, idx, list) => {
+                  const label =
+                    card.id === 'prayer'
+                      ? 'Sholat'
+                      : card.id === 'schedule'
+                      ? 'Jadwal (Bola & TV)'
+                      : 'Cuaca';
+                  return (
+                    <div
+                      key={card.id}
+                      className="flex items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-950 px-3 py-2"
+                    >
+                      <span
+                        className={`text-xs font-medium ${
+                          card.visible ? 'text-slate-100' : 'text-slate-500 line-through'
+                        }`}
+                      >
+                        0{idx + 1}. {label}
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          disabled={idx === 0}
+                          onClick={() => {
+                            const next = [...list];
+                            const [item] = next.splice(idx, 1);
+                            next.splice(idx - 1, 0, item);
+                            setDraft((prev) => ({ ...prev, dashboardCards: next }));
+                          }}
+                          className="rounded-lg border border-slate-700 bg-slate-900 p-1.5 text-slate-200 disabled:opacity-35"
+                          aria-label={`Geser ${label} naik`}
+                        >
+                          <ArrowUp className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={idx === list.length - 1}
+                          onClick={() => {
+                            const next = [...list];
+                            const [item] = next.splice(idx, 1);
+                            next.splice(idx + 1, 0, item);
+                            setDraft((prev) => ({ ...prev, dashboardCards: next }));
+                          }}
+                          className="rounded-lg border border-slate-700 bg-slate-900 p-1.5 text-slate-200 disabled:opacity-35"
+                          aria-label={`Geser ${label} turun`}
+                        >
+                          <ArrowDown className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const next = list.map((c) =>
+                              c.id === card.id ? { ...c, visible: !c.visible } : c
+                            );
+                            setDraft((prev) => ({ ...prev, dashboardCards: next }));
+                          }}
+                          className={`flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-medium ${
+                            card.visible
+                              ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200'
+                              : 'border-slate-700 bg-slate-900 text-slate-400'
+                          }`}
+                        >
+                          {card.visible ? (
+                            <>
+                              <Eye className="h-3 w-3" />
+                              <span>Tampil</span>
+                            </>
+                          ) : (
+                            <>
+                              <EyeOff className="h-3 w-3" />
+                              <span>Sembunyi</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </section>
 

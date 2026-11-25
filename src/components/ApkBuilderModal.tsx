@@ -265,7 +265,7 @@ export const ApkBuilderModal: React.FC<ApkBuilderModalProps> = ({
                 <div>
                   <span className="font-medium text-slate-100">MainActivity.kt (Kotlin + WebViewAssetLoader)</span>
                   <p className="text-xs text-slate-400">
-                    Menyediakan bridge <code className="text-sky-300">window.Android</code> untuk membaca daftar semua aplikasi TV terpasang beserta ikonnya (<code className="text-sky-300">getApps()</code>), meluncurkan aplikasi (<code className="text-sky-300">launch()</code>), dan membuka pengaturan WiFi/HDMI/Suara.
+                    Menyediakan bridge <code className="text-sky-300">window.Android</code> untuk membaca daftar aplikasi TV terpasang (<code className="text-sky-300">getApps()</code>), meluncurkan aplikasi (<code className="text-sky-300">launch()</code>), membuka pengaturan WiFi/HDMI/Suara, serta mengaktifkan mode hening Auto-Silent DND (<code className="text-sky-300">setDnd()</code> + <code className="text-sky-300">ACCESS_NOTIFICATION_POLICY</code>) saat waktu sholat tiba.
                   </p>
                 </div>
               </div>
