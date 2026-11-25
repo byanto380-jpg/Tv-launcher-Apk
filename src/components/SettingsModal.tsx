@@ -1,44 +1,54 @@
 import React, { useMemo, useState } from 'react';
 import {
+  Baby,
   BellOff,
   Check,
   Film,
   Image as ImageIcon,
   MapPin,
   Music,
+  Palette,
   QrCode,
   RefreshCw,
   Search,
+  ShieldCheck,
   Star,
   SunMoon,
   Tv,
   Upload,
   Volume2,
   X,
+  Zap,
 } from 'lucide-react';
 import { useDpadNavigation } from '../hooks/useDpadNavigation';
 import { useModalTransition } from '../hooks/useModalTransition';
 import {
+  ACCENT_COLOR_OPTIONS,
   AUTO_SILENT_DURATION_OPTIONS,
   DPAD_SPEED_OPTIONS,
   FOOTBALL_LEAGUES,
   LIVE_WALLPAPER_FILTERS,
   LIVE_WALLPAPER_THEMES,
   PRAYER_METHODS,
+  QUICK_SHORTCUT_ACTION_OPTIONS,
   THEME_MODE_OPTIONS,
   normalizeDashboardCards,
+  normalizeKidsPin,
+  normalizeQuickShortcut,
   playAdzanSound,
   saveAdzanAudio,
   searchCities,
 } from '../services/launcherApis';
 import { DashboardLayoutGrid } from './DashboardLayoutGrid';
 import type {
+  AccentColorPreset,
   AndroidAppItem,
   DpadSpeed,
   GeoCityResult,
   LauncherSettings,
   LiveWallpaperFilter,
   LiveWallpaperTheme,
+  QuickShortcutAction,
   TimeThemeMode,
 } from '../types/launcher';
 
@@ -226,6 +236,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       return {
         ...prev,
         favoriteApps: exists ? current.filter((x) => x !== id) : [...current, id],
+      };
+    });
+  };
+
+  const toggleKidsApp = (id: string) => {
+    setDraft((prev) => {
+      const current = prev.kidsApps || [];
+      const exists = current.includes(id);
+      return {
+        ...prev,
+        kidsApps: exists ? current.filter((x) => x !== id) : [...current, id],
       };
     });
   };
@@ -422,6 +443,48 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </option>
               ))}
             </select>
+
+            {/* Accent Color Override */}
+            <div className="space-y-2 pt-2">
+              <label className="flex items-center gap-2 text-sm font-medium text-slate-300">
+                <Palette className="h-4 w-4 text-sky-400" />
+                <span>Warna Aksen UI Global (Border Fokus &amp; Ikon)</span>
+              </label>
+              <p className="text-xs text-slate-400">
+                Ganti warna sorotan D-pad, tab aktif, dan ikon utama dengan warna pilihan Anda
+              </p>
+              <div className="grid gap-2 sm:grid-cols-3">
+                {ACCENT_COLOR_OPTIONS.map((opt) => {
+                  const active = (draft.accentColor || 'theme') === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      data-focusable="true"
+                      aria-pressed={active}
+                      onClick={() =>
+                        setDraft((prev) => ({
+                          ...prev,
+                          accentColor: opt.value as AccentColorPreset,
+                        }))
+                      }
+                      className={`flex items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-left text-xs font-medium transition-colors ${
+                        active
+                          ? 'border-white/75 bg-slate-800 text-white shadow-md'
+                          : 'border-slate-700/80 bg-slate-800/60 text-slate-300 hover:bg-slate-800'
+                      }`}
+                    >
+                      <span
+                        aria-hidden="true"
+                        className="h-4 w-4 shrink-0 rounded-full border border-white/30"
+                        style={{ backgroundColor: opt.swatchHex }}
+                      />
+                      <span className="truncate">{opt.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </section>
 
           {/* Live Wallpaper (Ambient Video) */}
@@ -804,6 +867,304 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           </section>
 
+          {/* Pintasan Cepat Pojok Kiri Bawah */}
+          <section className="space-y-3 border-b border-slate-800/80 pb-6">
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium text-slate-300">
+                <Zap className="h-4 w-4 text-amber-400" />
+                <span>Tombol Pintasan Cepat (Pojok Kiri Bawah)</span>
+              </label>
+              <p className="mt-0.5 text-xs text-slate-400">
+                Atur aksi satu-klik remote di pojok kiri bawah untuk membersihkan cache RAM atau meluncurkan aplikasi favorit
+              </p>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="space-y-1.5">
+                <label htmlFor="quick-shortcut-action" className="block text-xs font-medium text-slate-300">
+                  Aksi Pintasan Cepat
+                </label>
+                <select
+                  id="quick-shortcut-action"
+                  data-focusable="true"
+                  value={normalizeQuickShortcut(draft.quickShortcut).action}
+                  onChange={(e) => {
+                    const nextAction = e.target.value as QuickShortcutAction;
+                    const defLabel =
+                      QUICK_SHORTCUT_ACTION_OPTIONS.find((o) => o.value === nextAction)
+                        ?.defaultLabel || 'Pintasan Cepat';
+                    setDraft((prev) => ({
+                      ...prev,
+                      quickShortcut: {
+                        ...normalizeQuickShortcut(prev.quickShortcut),
+                        action: nextAction,
+                        label: defLabel,
+                      },
+                    }));
+                  }}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-800/90 px-4 py-2.5 text-sm text-slate-100"
+                >
+                  {QUICK_SHORTCUT_ACTION_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value} className="bg-slate-900 text-slate-100">
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label htmlFor="quick-shortcut-label" className="block text-xs font-medium text-slate-300">
+                  Label Tombol di Layar Utama
+                </label>
+                <input
+                  id="quick-shortcut-label"
+                  type="text"
+                  data-focusable="true"
+                  maxLength={32}
+                  value={normalizeQuickShortcut(draft.quickShortcut).label}
+                  onChange={(e) =>
+                    setDraft((prev) => ({
+                      ...prev,
+                      quickShortcut: {
+                        ...normalizeQuickShortcut(prev.quickShortcut),
+                        label: e.target.value,
+                      },
+                    }))
+                  }
+                  placeholder="mis. Bersihkan Cache RAM"
+                  className="w-full rounded-xl border border-slate-700 bg-slate-800/90 px-4 py-2.5 text-sm text-slate-100 placeholder-slate-500"
+                />
+              </div>
+            </div>
+
+            {normalizeQuickShortcut(draft.quickShortcut).action === 'open-favorite' && (
+              <div className="space-y-1.5">
+                <label htmlFor="quick-shortcut-target" className="block text-xs font-medium text-slate-300">
+                  Pilih Aplikasi Target
+                </label>
+                <select
+                  id="quick-shortcut-target"
+                  data-focusable="true"
+                  value={normalizeQuickShortcut(draft.quickShortcut).targetAppId || ''}
+                  onChange={(e) => {
+                    const targetId = e.target.value;
+                    const matched = isAndroidEnv
+                      ? androidApps.find((a) => a.p === targetId)?.n
+                      : shortcutCandidates.find((c) => c.id === targetId)?.name;
+                    setDraft((prev) => ({
+                      ...prev,
+                      quickShortcut: {
+                        ...normalizeQuickShortcut(prev.quickShortcut),
+                        targetAppId: targetId || undefined,
+                        label: matched ? `Buka ${matched}`.slice(0, 32) : prev.quickShortcut.label,
+                      },
+                    }));
+                  }}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-800/90 px-4 py-2.5 text-sm text-slate-100"
+                >
+                  <option value="" className="bg-slate-900 text-slate-100">
+                    Otomatis (Aplikasi Favorit Pertama)
+                  </option>
+                  {(isAndroidEnv
+                    ? androidApps.map((a) => ({ id: a.p, name: a.n }))
+                    : shortcutCandidates
+                  ).map((item) => (
+                    <option key={item.id} value={item.id} className="bg-slate-900 text-slate-100">
+                      {item.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </section>
+
+          {/* Mode Anak (Kids Mode) */}
+          <section className="space-y-4 border-b border-slate-800/80 pb-6">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="space-y-0.5">
+                <label className="flex items-center gap-2 text-sm font-medium text-slate-200">
+                  <Baby className="h-4 w-4 text-emerald-300" />
+                  <span>Mode Anak (Kids Mode)</span>
+                </label>
+                <p className="text-xs text-slate-400">
+                  Saat aktif, layar TV terkunci hanya ke aplikasi yang ditandai sebagai Aplikasi Anak dan menonaktifkan Pengaturan serta aksi sistem.
+                </p>
+              </div>
+              <span
+                className={`font-mono-tabular text-xs font-semibold ${
+                  draft.kidsMode === '1' ? 'text-emerald-300' : 'text-slate-400'
+                }`}
+              >
+                {draft.kidsMode === '1' ? 'Terkunci · Mode Anak Aktif' : 'Nonaktif'}
+              </span>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="space-y-1.5">
+                <label htmlFor="kids-mode-select" className="block text-xs font-medium text-slate-300">
+                  Status Mode Anak
+                </label>
+                <select
+                  id="kids-mode-select"
+                  data-focusable="true"
+                  value={draft.kidsMode === '1' ? '1' : '0'}
+                  onChange={(e) =>
+                    setDraft((prev) => ({
+                      ...prev,
+                      kidsMode: e.target.value === '1' ? '1' : '0',
+                    }))
+                  }
+                  className="w-full rounded-xl border border-slate-700 bg-slate-800/90 px-4 py-2.5 text-sm text-slate-100"
+                >
+                  <option value="0" className="bg-slate-900 text-slate-100">
+                    Nonaktif (Tampilan Launcher Normal)
+                  </option>
+                  <option value="1" className="bg-slate-900 text-slate-100">
+                    Aktif (Kunci Antarmuka ke Aplikasi Anak)
+                  </option>
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label htmlFor="kids-pin-input" className="block text-xs font-medium text-slate-300">
+                  PIN Orang Tua (4 Digit untuk Keluar Mode Anak)
+                </label>
+                <input
+                  id="kids-pin-input"
+                  type="password"
+                  inputMode="numeric"
+                  data-focusable="true"
+                  maxLength={4}
+                  value={draft.kidsPin}
+                  onChange={(e) => {
+                    const digits = e.target.value.replace(/\D/g, '').slice(0, 4);
+                    setDraft((prev) => ({ ...prev, kidsPin: digits }));
+                  }}
+                  placeholder="Default: 1234"
+                  className="font-mono-tabular w-full rounded-xl border border-slate-700 bg-slate-800/90 px-4 py-2.5 text-sm tracking-widest text-slate-100 placeholder-slate-500"
+                />
+                <p className="text-[11px] text-slate-400">
+                  Jika kurang dari 4 angka, otomatis kembali ke PIN default 1234 saat disimpan.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-xs font-medium text-slate-300">
+                  <ShieldCheck className="h-4 w-4 text-emerald-300" />
+                  <span>
+                    Pilih Aplikasi Anak ({(draft.kidsApps || []).length} dipilih)
+                  </span>
+                </div>
+                {(isAndroidEnv ? androidApps.length > 0 : shortcutCandidates.length > 0) && (
+                  <button
+                    type="button"
+                    data-focusable="true"
+                    onClick={() => {
+                      const allIds = isAndroidEnv
+                        ? androidApps.map((a) => a.p)
+                        : shortcutCandidates.map((c) => c.id);
+                      const allSelected =
+                        allIds.length > 0 &&
+                        allIds.every((id) => (draft.kidsApps || []).includes(id));
+                      setDraft((prev) => ({
+                        ...prev,
+                        kidsApps: allSelected ? [] : allIds,
+                      }));
+                    }}
+                    className="rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-200 hover:bg-slate-700"
+                  >
+                    {(isAndroidEnv
+                      ? androidApps.every((a) => (draft.kidsApps || []).includes(a.p))
+                      : shortcutCandidates.every((c) => (draft.kidsApps || []).includes(c.id)))
+                      ? 'Kosongkan'
+                      : 'Pilih Semua'}
+                  </button>
+                )}
+              </div>
+
+              {isAndroidEnv ? (
+                androidApps.length === 0 ? (
+                  <p className="text-xs text-slate-400">Belum ada aplikasi Android terdeteksi.</p>
+                ) : (
+                  <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
+                    {androidApps.map((app) => {
+                      const isKid = (draft.kidsApps || []).includes(app.p);
+                      return (
+                        <button
+                          key={`kid-${app.p}`}
+                          type="button"
+                          data-focusable="true"
+                          onClick={() => toggleKidsApp(app.p)}
+                          className={`flex items-center justify-between gap-2 rounded-xl border px-3.5 py-2.5 text-left ${
+                            isKid
+                              ? 'border-emerald-400/65 bg-emerald-500/15 text-emerald-100'
+                              : 'border-slate-700/80 bg-slate-800/70 text-slate-200 hover:bg-slate-800'
+                          }`}
+                        >
+                          <div className="flex min-w-0 items-center gap-2.5">
+                            {app.i ? (
+                              <img
+                                src={`data:image/png;base64,${app.i}`}
+                                alt={app.n}
+                                className="h-7 w-7 shrink-0 rounded-md object-contain"
+                              />
+                            ) : (
+                              <Tv className="h-5 w-5 shrink-0 text-sky-400" />
+                            )}
+                            <span className="truncate text-sm font-medium">{app.n}</span>
+                          </div>
+                          <Baby
+                            className={`h-4 w-4 shrink-0 ${
+                              isKid ? 'text-emerald-300' : 'text-slate-500'
+                            }`}
+                          />
+                        </button>
+                      );
+                    })}
+                  </div>
+                )
+              ) : shortcutCandidates.length === 0 ? (
+                <p className="text-xs text-slate-400">
+                  Tambahkan pintasan aplikasi di bagian bawah untuk memilih Aplikasi Anak.
+                </p>
+              ) : (
+                <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
+                  {shortcutCandidates.map((item) => {
+                    const isKid = (draft.kidsApps || []).includes(item.id);
+                    return (
+                      <button
+                        key={`kid-${item.id}`}
+                        type="button"
+                        data-focusable="true"
+                        onClick={() => toggleKidsApp(item.id)}
+                        className={`flex items-center justify-between gap-2 rounded-xl border px-3.5 py-2.5 text-left ${
+                          isKid
+                            ? 'border-emerald-400/65 bg-emerald-500/15 text-emerald-100'
+                            : 'border-slate-700/80 bg-slate-800/70 text-slate-200 hover:bg-slate-800'
+                        }`}
+                      >
+                        <span className="truncate text-sm font-medium">{item.name}</span>
+                        <Baby
+                          className={`h-4 w-4 shrink-0 ${
+                            isKid ? 'text-emerald-300' : 'text-slate-500'
+                          }`}
+                        />
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {draft.kidsMode === '1' && (draft.kidsApps || []).length === 0 && (
+                <p className="text-xs font-medium text-amber-300">
+                  Peringatan: Mode Anak aktif namun belum ada Aplikasi Anak yang dipilih. Tandai minimal 1 aplikasi agar anak memiliki aplikasi yang dapat dibuka.
+                </p>
+              )}
+            </div>
+          </section>
+
           {/* Aplikasi Favorit */}
           <section className="space-y-3 border-b border-slate-800/80 pb-6">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -924,7 +1285,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             type="button"
             data-focusable="true"
             onClick={() => {
-              onSave(draft);
+              onSave({
+                ...draft,
+                kidsMode: draft.kidsMode === '1' ? '1' : '0',
+                kidsPin: normalizeKidsPin(draft.kidsPin),
+                kidsApps: Array.isArray(draft.kidsApps) ? draft.kidsApps : [],
+              });
               onClose();
             }}
             className="flex items-center gap-2 rounded-xl bg-sky-500 px-6 py-2.5 text-sm font-semibold text-slate-950 hover:bg-sky-400 whitespace-nowrap shrink-0"

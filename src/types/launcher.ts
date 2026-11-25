@@ -1,9 +1,29 @@
 export type LiveWallpaperTheme = 'clouds' | 'ocean' | 'aurora' | 'cosmos';
 export type LiveWallpaperFilter = 'none' | 'monochrome' | 'sepia';
+export type AccentColorPreset =
+  | 'theme'
+  | 'neon-green'
+  | 'royal-blue'
+  | 'amber-gold'
+  | 'crimson'
+  | 'violet';
 
 export type TimeThemePhase = 'dawn' | 'day' | 'night';
 export type TimeThemeMode = 'auto' | TimeThemePhase;
 export type DpadSpeed = 'slow' | 'normal' | 'fast';
+
+export type QuickShortcutAction =
+  | 'clear-cache'
+  | 'open-favorite'
+  | 'toggle-dnd'
+  | 'open-settings'
+  | 'open-haramain';
+
+export interface QuickShortcutConfig {
+  action: QuickShortcutAction;
+  label: string;
+  targetAppId?: string;
+}
 
 export interface LiveWallpaperItem {
   id: string;
@@ -45,10 +65,15 @@ export interface LauncherSettings {
   liveWallpaperTheme: LiveWallpaperTheme;
   liveWallpaperFilter: LiveWallpaperFilter;
   themeMode: TimeThemeMode;
+  accentColor: AccentColorPreset;
   screenSaver: '1' | '0';
   autoSilent: '1' | '0';
   autoSilentDurationMin: number;
   dashboardCards: DashboardCardConfig[];
+  quickShortcut: QuickShortcutConfig;
+  kidsMode: '1' | '0';
+  kidsPin: string;
+  kidsApps: string[];
 }
 
 export interface TvChannelInfo {
@@ -181,6 +206,10 @@ export interface FootballMatch {
   idEvent?: string;
   strHomeTeam: string;
   strAwayTeam: string;
+  intHomeScore?: string | null;
+  intAwayScore?: string | null;
+  strStatus?: string | null;
+  strTimestamp?: string | null;
   dateEvent: string;
   strTime?: string;
   strLeague?: string;
@@ -224,6 +253,8 @@ export interface AndroidBridge {
   setDnd?: (enabled: boolean) => boolean;
   hasDndAccess?: () => boolean;
   requestDndPermission?: () => void;
+  getRemoteBattery?: () => string;
+  clearAppCache?: () => string;
 }
 
 declare global {

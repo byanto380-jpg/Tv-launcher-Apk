@@ -1,4 +1,5 @@
 import type {
+  AccentColorPreset,
   DailyPrayerEntry,
   DashboardCardConfig,
   DashboardCardId,
@@ -17,6 +18,8 @@ import type {
   NewsHeadline,
   PrayerScheduleResult,
   PrayerTimings,
+  QuickShortcutAction,
+  QuickShortcutConfig,
   ScreenSaverPhoto,
   TimeThemeMode,
   TimeThemePhase,
@@ -42,6 +45,7 @@ export const DEFAULT_SETTINGS: LauncherSettings = {
   liveWallpaperTheme: 'clouds',
   liveWallpaperFilter: 'none',
   themeMode: 'auto',
+  accentColor: 'theme',
   screenSaver: '1',
   autoSilent: '1',
   autoSilentDurationMin: 15,
@@ -50,6 +54,13 @@ export const DEFAULT_SETTINGS: LauncherSettings = {
     { id: 'schedule', visible: true },
     { id: 'weather', visible: true },
   ],
+  quickShortcut: {
+    action: 'clear-cache',
+    label: 'Bersihkan Cache RAM',
+  },
+  kidsMode: '0',
+  kidsPin: '1234',
+  kidsApps: [],
   apps: [
     'YouTube TV|https://www.youtube.com/tv',
     'Netflix|https://www.netflix.com',
@@ -58,6 +69,125 @@ export const DEFAULT_SETTINGS: LauncherSettings = {
     'Google|https://www.google.com',
   ].join('\n'),
 };
+
+export function normalizeKidsPin(raw: unknown): string {
+  if (typeof raw === 'string') {
+    const digits = raw.replace(/\D/g, '').slice(0, 4);
+    if (digits.length === 4) return digits;
+  }
+  return '1234';
+}
+
+export const DEFAULT_QUICK_SHORTCUT: QuickShortcutConfig = {
+  action: 'clear-cache',
+  label: 'Bersihkan Cache RAM',
+};
+
+export const QUICK_SHORTCUT_ACTION_OPTIONS: Array<{
+  value: QuickShortcutAction;
+  label: string;
+  defaultLabel: string;
+}> = [
+  {
+    value: 'clear-cache',
+    label: 'Bersihkan Cache RAM (Optimasi Memori)',
+    defaultLabel: 'Bersihkan Cache RAM',
+  },
+  {
+    value: 'open-favorite',
+    label: 'Buka Aplikasi Favorit',
+    defaultLabel: 'Buka Aplikasi Favorit',
+  },
+  {
+    value: 'toggle-dnd',
+    label: 'Aktif / Nonaktifkan Mode Hening (DND)',
+    defaultLabel: 'Mode Hening DND',
+  },
+  {
+    value: 'open-haramain',
+    label: 'Live Makkah & Madinah',
+    defaultLabel: 'Live Haramain',
+  },
+  {
+    value: 'open-settings',
+    label: 'Buka Pengaturan Launcher',
+    defaultLabel: 'Pengaturan Cepat',
+  },
+];
+
+export function normalizeQuickShortcut(raw: unknown): QuickShortcutConfig {
+  if (!raw || typeof raw !== 'object') {
+    return { ...DEFAULT_QUICK_SHORTCUT };
+  }
+  const obj = raw as { action?: unknown; label?: unknown; targetAppId?: unknown };
+  const validActions: QuickShortcutAction[] = [
+    'clear-cache',
+    'open-favorite',
+    'toggle-dnd',
+    'open-settings',
+    'open-haramain',
+  ];
+  const action: QuickShortcutAction = validActions.includes(obj.action as QuickShortcutAction)
+    ? (obj.action as QuickShortcutAction)
+    : 'clear-cache';
+  const fallbackLabel =
+    QUICK_SHORTCUT_ACTION_OPTIONS.find((o) => o.value === action)?.defaultLabel ||
+    DEFAULT_QUICK_SHORTCUT.label;
+  const label =
+    typeof obj.label === 'string' && obj.label.trim()
+      ? obj.label.trim().slice(0, 32)
+      : fallbackLabel;
+  const targetAppId =
+    typeof obj.targetAppId === 'string' && obj.targetAppId.trim()
+      ? obj.targetAppId.trim().slice(0, 200)
+      : undefined;
+  return { action, label, targetAppId };
+}
+
+export async function clearLauncherRamCache(): Promise<{
+  removedKeys: number;
+  freedLabel: string;
+}> {
+  let removedKeys = 0;
+  let clearedBytes = 0;
+  const ephemeralPrefixes = ['wx2-', 'pray', 'mt-', 'tvsched-', 'news-', 'livewp-', 'ssaver-'];
+
+  try {
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && ephemeralPrefixes.some((p) => k.startsWith(p))) {
+        keysToRemove.push(k);
+        clearedBytes += (localStorage.getItem(k) || '').length * 2;
+      }
+    }
+    keysToRemove.forEach((k) => localStorage.removeItem(k));
+    removedKeys = keysToRemove.length;
+  } catch {
+    // ignore storage errors
+  }
+
+  try {
+    if ('caches' in window) {
+      const cacheNames = await window.caches.keys();
+      await Promise.all(cacheNames.map((name) => window.caches.delete(name)));
+    }
+  } catch {
+    // ignore CacheStorage errors
+  }
+
+  let androidFreed = '';
+  try {
+    const res = window.Android?.clearAppCache?.();
+    if (res) androidFreed = res;
+  } catch {
+    // ignore bridge errors
+  }
+
+  const kb = Math.max(1, Math.round(clearedBytes / 1024));
+  const freedLabel = androidFreed || `${kb} KB cache data`;
+  return { removedKeys, freedLabel };
+}
 
 export const DEFAULT_DASHBOARD_CARDS: DashboardCardConfig[] = [
   { id: 'prayer', visible: true },
@@ -281,6 +411,136 @@ export const TIME_THEME_PALETTES: Record<TimeThemePhase, TimeThemePalette> = {
   },
 };
 
+export interface AccentColorOption {
+  value: AccentColorPreset;
+  label: string;
+  swatchHex: string;
+  focusHex: string;
+  focusRgb: string;
+  focusInputBg: string;
+  accentTextClass: string;
+  activeTabClass: string;
+  primaryButtonClass: string;
+  nextPrayerClass: string;
+  vizBarClass: string;
+}
+
+export const ACCENT_COLOR_OPTIONS: AccentColorOption[] = [
+  {
+    value: 'theme',
+    label: 'Bawaan Tema Waktu',
+    swatchHex: '#38bdf8',
+    focusHex: '#38bdf8',
+    focusRgb: '56, 189, 248',
+    focusInputBg: 'rgba(30, 58, 95, 0.55)',
+    accentTextClass: 'text-sky-300',
+    activeTabClass: 'border-sky-400 bg-sky-500/25 text-sky-100',
+    primaryButtonClass: 'border-sky-400/50 bg-sky-500/20 text-sky-100 hover:bg-sky-500/30',
+    nextPrayerClass: 'bg-sky-600 font-semibold text-white',
+    vizBarClass: 'bg-sky-400',
+  },
+  {
+    value: 'neon-green',
+    label: 'Hijau Neon',
+    swatchHex: '#39ff14',
+    focusHex: '#4ade80',
+    focusRgb: '74, 222, 128',
+    focusInputBg: 'rgba(20, 83, 45, 0.5)',
+    accentTextClass: 'text-lime-300',
+    activeTabClass: 'border-lime-400 bg-lime-500/25 text-lime-100',
+    primaryButtonClass: 'border-lime-400/55 bg-lime-500/20 text-lime-100 hover:bg-lime-500/30',
+    nextPrayerClass: 'bg-emerald-600 font-semibold text-white',
+    vizBarClass: 'bg-lime-400',
+  },
+  {
+    value: 'royal-blue',
+    label: 'Biru Royal',
+    swatchHex: '#3b82f6',
+    focusHex: '#60a5fa',
+    focusRgb: '59, 130, 246',
+    focusInputBg: 'rgba(30, 64, 175, 0.5)',
+    accentTextClass: 'text-blue-300',
+    activeTabClass: 'border-blue-400 bg-blue-600/30 text-blue-100',
+    primaryButtonClass: 'border-blue-400/60 bg-blue-600/25 text-blue-100 hover:bg-blue-600/35',
+    nextPrayerClass: 'bg-blue-600 font-semibold text-white',
+    vizBarClass: 'bg-blue-400',
+  },
+  {
+    value: 'amber-gold',
+    label: 'Emas Hangat',
+    swatchHex: '#fbbf24',
+    focusHex: '#fbbf24',
+    focusRgb: '251, 191, 36',
+    focusInputBg: 'rgba(120, 53, 15, 0.5)',
+    accentTextClass: 'text-amber-300',
+    activeTabClass: 'border-amber-400 bg-amber-500/25 text-amber-100',
+    primaryButtonClass: 'border-amber-400/55 bg-amber-500/20 text-amber-100 hover:bg-amber-500/30',
+    nextPrayerClass: 'bg-amber-600 font-semibold text-white',
+    vizBarClass: 'bg-amber-400',
+  },
+  {
+    value: 'crimson',
+    label: 'Merah Koral',
+    swatchHex: '#fb7185',
+    focusHex: '#fb7185',
+    focusRgb: '251, 113, 133',
+    focusInputBg: 'rgba(136, 19, 55, 0.5)',
+    accentTextClass: 'text-rose-300',
+    activeTabClass: 'border-rose-400 bg-rose-500/25 text-rose-100',
+    primaryButtonClass: 'border-rose-400/55 bg-rose-500/20 text-rose-100 hover:bg-rose-500/30',
+    nextPrayerClass: 'bg-rose-600 font-semibold text-white',
+    vizBarClass: 'bg-rose-400',
+  },
+  {
+    value: 'violet',
+    label: 'Ungu Elektrik',
+    swatchHex: '#c084fc',
+    focusHex: '#c084fc',
+    focusRgb: '192, 132, 252',
+    focusInputBg: 'rgba(88, 28, 135, 0.5)',
+    accentTextClass: 'text-purple-300',
+    activeTabClass: 'border-purple-400 bg-purple-500/25 text-purple-100',
+    primaryButtonClass: 'border-purple-400/55 bg-purple-500/20 text-purple-100 hover:bg-purple-500/30',
+    nextPrayerClass: 'bg-purple-600 font-semibold text-white',
+    vizBarClass: 'bg-purple-400',
+  },
+];
+
+export function resolveEffectivePalette(
+  phase: TimeThemePhase,
+  accentColor: AccentColorPreset = 'theme'
+): TimeThemePalette & {
+  focusHex?: string;
+  focusRgb?: string;
+  focusInputBg?: string;
+  vizBarClass: string;
+} {
+  const base = TIME_THEME_PALETTES[phase];
+  const defaultVizBar =
+    phase === 'dawn' ? 'bg-orange-400' : phase === 'night' ? 'bg-violet-400' : 'bg-sky-400';
+
+  if (!accentColor || accentColor === 'theme') {
+    return { ...base, vizBarClass: defaultVizBar };
+  }
+
+  const preset = ACCENT_COLOR_OPTIONS.find((a) => a.value === accentColor);
+  if (!preset) {
+    return { ...base, vizBarClass: defaultVizBar };
+  }
+
+  return {
+    ...base,
+    accentTextClass: preset.accentTextClass,
+    activeTabClass: preset.activeTabClass,
+    primaryButtonClass: preset.primaryButtonClass,
+    nextPrayerClass: preset.nextPrayerClass,
+    focusHex: preset.focusHex,
+    focusRgb: preset.focusRgb,
+    focusInputBg: preset.focusInputBg,
+    vizBarClass: preset.vizBarClass,
+  };
+}
+
 export function resolveTimeTheme(
   hour: number,
   mode: TimeThemeMode = 'auto'
@@ -320,6 +580,16 @@ export function loadSettings(): LauncherSettings {
       themeMode: ['auto', 'dawn', 'day', 'night'].includes(parsed?.themeMode)
         ? parsed.themeMode
         : DEFAULT_SETTINGS.themeMode,
+      accentColor: [
+        'theme',
+        'neon-green',
+        'royal-blue',
+        'amber-gold',
+        'crimson',
+        'violet',
+      ].includes(parsed?.accentColor)
+        ? parsed.accentColor
+        : DEFAULT_SETTINGS.accentColor,
       dpadSpeed: ['slow', 'normal', 'fast'].includes(parsed?.dpadSpeed)
         ? parsed.dpadSpeed
         : DEFAULT_SETTINGS.dpadSpeed,
@@ -331,6 +601,12 @@ export function loadSettings(): LauncherSettings {
         ? Number(parsed.autoSilentDurationMin)
         : DEFAULT_SETTINGS.autoSilentDurationMin,
       dashboardCards: normalizeDashboardCards(parsed?.dashboardCards),
+      quickShortcut: normalizeQuickShortcut(parsed?.quickShortcut),
+      kidsMode: parsed?.kidsMode === '1' ? '1' : '0',
+      kidsPin: normalizeKidsPin(parsed?.kidsPin),
+      kidsApps: Array.isArray(parsed?.kidsApps)
+        ? parsed.kidsApps.filter((x: unknown): x is string => typeof x === 'string' && x.trim().length > 0)
+        : [],
     };
   } catch {
     return { ...DEFAULT_SETTINGS };
@@ -689,6 +965,67 @@ export async function fetchFootballMatches(leagueId: string): Promise<FootballMa
     return json.events || [];
   } catch {
     return cached?.events || [];
+  }
+}
+
+function parseMatchTimestampMs(m: FootballMatch): number | null {
+  if (m.strTimestamp) {
+    const t = Date.parse(m.strTimestamp);
+    if (Number.isFinite(t)) return t;
+  }
+  if (m.dateEvent) {
+    const iso = `${m.dateEvent}T${m.strTime || '12:00:00'}${m.strTime ? 'Z' : 'Z'}`;
+    const t = Date.parse(iso);
+    if (Number.isFinite(t)) return t;
+  }
+  return null;
+}
+
+export async function fetchRecentFootballResults(leagueId: string): Promise<FootballMatch[]> {
+  const key = `mt-past24-${leagueId}`;
+  const cached = readCache<{ events?: FootballMatch[] }>(key);
+  const nowMs = Date.now();
+  const windowStartMs = nowMs - 24 * 60 * 60 * 1000;
+
+  const filterLast24h = (events: FootballMatch[]) =>
+    events.filter((ev) => {
+      if (ev.intHomeScore === null || ev.intHomeScore === undefined || ev.intHomeScore === '') {
+        return false;
+      }
+      if (ev.intAwayScore === null || ev.intAwayScore === undefined || ev.intAwayScore === '') {
+        return false;
+      }
+      const ts = parseMatchTimestampMs(ev);
+      if (ts === null) return false;
+      // Match kicked off within the past ~26h so matches that ended within the last 24h are included
+      return ts >= windowStartMs - 2 * 60 * 60 * 1000 && ts <= nowMs;
+    });
+
+  try {
+    const fetchLeaguePast = async (id: string): Promise<FootballMatch[]> => {
+      const r = await fetch(
+        `https://www.thesportsdb.com/api/v1/json/3/eventspastleague.php?id=${encodeURIComponent(id)}`
+      );
+      if (!r.ok) return [];
+      const j = (await r.json()) as { events?: FootballMatch[] };
+      return Array.isArray(j.events) ? j.events : [];
+    };
+
+    const primary = await fetchLeaguePast(leagueId);
+    let results = filterLast24h(primary);
+
+    // If the currently selected league had no finished match in the past 24h, check sibling major leagues
+    if (results.length === 0) {
+      const otherIds = FOOTBALL_LEAGUES.map((l) => l.value).filter((id) => id !== leagueId);
+      const others = await Promise.all(otherIds.slice(0, 5).map((id) => fetchLeaguePast(id).catch(() => [])));
+      results = filterLast24h(others.flat());
+    }
+
+    results.sort((a, b) => (parseMatchTimestampMs(b) || 0) - (parseMatchTimestampMs(a) || 0));
+    writeCache(key, { events: results });
+    return results;
+  } catch {
+    return filterLast24h(cached?.events || []);
   }
 }
 

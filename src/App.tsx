@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, MotionConfig, motion } from 'motion/react';
 import {
   AlertTriangle,
+  Baby,
   BarChart3,
   BellOff,
   Bot,
@@ -13,7 +14,9 @@ import {
   CloudRain,
   CloudSun,
   Gamepad2,
+  History,
   LayoutGrid,
+  Lock,
   MapPin,
   Maximize2,
   Monitor,
@@ -27,6 +30,7 @@ import {
   RotateCcw,
   Search,
   Settings,
+  ShieldCheck,
   Snowflake,
   Star,
   Sun,
@@ -35,6 +39,7 @@ import {
   Volume2,
   Wifi,
   X,
+  Zap,
 } from 'lucide-react';
 import { ApkBuilderModal } from './components/ApkBuilderModal';
 import { AudioVisualizer } from './components/AudioVisualizer';
@@ -42,6 +47,7 @@ import { ConnectionStatusBadge } from './components/ConnectionStatusBadge';
 import { EmergencyBroadcastTicker } from './components/EmergencyBroadcastTicker';
 import { GeminiChatModal } from './components/GeminiChatModal';
 import { HaramainLiveModal } from './components/HaramainLiveModal';
+import { KidsUnlockModal } from './components/KidsUnlockModal';
 import { MapsModal } from './components/MapsModal';
 import { MobileSyncView } from './components/MobileSyncView';
 import { MusicStudioModal } from './components/MusicStudioModal';
@@ -49,6 +55,7 @@ import { NewsTicker } from './components/NewsTicker';
 import { OrbitSentinelGame } from './components/OrbitSentinelGame';
 import { PowerMenuModal } from './components/PowerMenuModal';
 import { QrSyncModal } from './components/QrSyncModal';
+import { RemoteBatteryBadge } from './components/RemoteBatteryBadge';
 import { ScreenSaverOverlay } from './components/ScreenSaverOverlay';
 import { SettingsModal } from './components/SettingsModal';
 import { WeeklyPrayerChart, type PrayerChartFilter } from './components/WeeklyPrayerChart';
@@ -61,11 +68,13 @@ import {
   PRAYER_LABELS,
   SCREEN_SAVER_IDLE_MS,
   TIME_THEME_PALETTES,
+  clearLauncherRamCache,
   evaluateWeatherWarning,
   fetchAmbientVideoLoops,
   fetchEmergencyBroadcast,
   fetchFootballMatches,
   fetchPrayerSchedule,
+  fetchRecentFootballResults,
   fetchTvSchedules,
   fetchWeather,
   getDayWeatherWarning,
@@ -74,13 +83,16 @@ import {
   getWeatherDescription,
   loadSettings,
   normalizeDashboardCards,
+  normalizeQuickShortcut,
   playAdzanSound,
+  resolveEffectivePalette,
   resolveTimeTheme,
   saveSettings,
 } from './services/launcherApis';
 import type {
   AndroidAppItem,
   DailyPrayerEntry,
+  DashboardCardId,
   EmergencyBroadcast,
   FootballMatch,
   HaramainCityId,
@@ -148,12 +160,16 @@ export default function App() {
 
   const [matches, setMatches] = useState<FootballMatch[]>([]);
   const [matchesLoading, setMatchesLoading] = useState(true);
-  const [card2Tab, setCard2Tab] = useState<'matches' | 'tv'>('matches');
+  const [recentMatchResults, setRecentMatchResults] = useState<FootballMatch[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [card2Tab, setCard2Tab] = useState<'matches' | 'history' | 'tv'>('matches');
   const [tvChannels, setTvChannels] = useState<TvChannelSchedule[]>([]);
   const [tvLoading, setTvLoading] = useState(true);
   const [selectedTvChannelId, setSelectedTvChannelId] = useState<string>('all');
   const [tvChannelPickerOpen, setTvChannelPickerOpen] = useState(false);
   const tvListScrollRef = useRef<HTMLDivElement | null>(null);
+  const [focusedCardId, setFocusedCardId] = useState<DashboardCardId | null>(null);
+  const [quickShortcutBusy, setQuickShortcutBusy] = useState(false);
 
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(true);
@@ -180,6 +196,7 @@ export default function App() {
   const [gameOpen, setGameOpen] = useState(false);
   const [haramainOpen, setHaramainOpen] = useState(false);
   const [haramainInitialCity, setHaramainInitialCity] = useState<HaramainCityId>('makkah');
+  const [kidsUnlockOpen, setKidsUnlockOpen] = useState(false);
   const [gmpQuotaExceeded, setGmpQuotaExceeded] = useState(false);
   const [mobileSyncSession, setMobileSyncSession] = useState<{
     code: string;
@@ -349,6 +366,7 @@ export default function App() {
   const loadAllData = useCallback(async (cfg: LauncherSettings) => {
     setPrayerLoading(true);
     setMatchesLoading(true);
+    setHistoryLoading(true);
     setWeatherLoading(true);
     setTvLoading(true);
 
@@ -357,9 +375,10 @@ export default function App() {
         ? cfg.favoriteTvChannels
         : ['rcti', 'sctv', 'indosiar', 'trans7', 'transtv'];
 
-    const [prayRes, matchRes, wxRes, tvRes] = await Promise.all([
+    const [prayRes, matchRes, pastRes, wxRes, tvRes] = await Promise.all([
       fetchPrayerSchedule(cfg),
       fetchFootballMatches(cfg.league),
+      fetchRecentFootballResults(cfg.league),
       fetchWeather(cfg),
       fetchTvSchedules(favChannels),
     ]);
@@ -371,6 +390,9 @@ export default function App() {
 
     setMatches(matchRes);
     setMatchesLoading(false);
+
+    setRecentMatchResults(pastRes);
+    setHistoryLoading(false);
 
     setWeather(wxRes);
     setWeatherRevision((prev) => prev + 1);
@@ -622,12 +644,38 @@ export default function App() {
     showToast,
   ]);
 
+  const isKidsMode = settings.kidsMode === '1';
+
+  useEffect(() => {
+    if (!isKidsMode) return;
+    setSettingsOpen(false);
+    setApkModalOpen(false);
+    setWeeklyModalOpen(false);
+    setPowerMenuOpen(false);
+    setQrSyncOpen(false);
+    setMapsOpen(false);
+    setChatOpen(false);
+    setMusicOpen(false);
+    setGameOpen(false);
+    setHaramainOpen(false);
+    setFavoriteEditMode(false);
+    setAppSearchQuery('');
+    setSimulatedExtremeActive(false);
+  }, [isKidsMode]);
+
   // Native Android bridge hooks
   useEffect(() => {
     window.__tvBack = () => {
       if (screenSaverActive) {
         setScreenSaverActive(false);
         return true;
+      }
+      if (kidsUnlockOpen) {
+        setKidsUnlockOpen(false);
+        return true;
+      }
+      if (isKidsMode) {
+        return false;
       }
       if (haramainOpen) {
         setHaramainOpen(false);
@@ -677,6 +725,11 @@ export default function App() {
     };
     window.__tvMenu = () => {
       setScreenSaverActive(false);
+      if (isKidsMode) {
+        setKidsUnlockOpen(true);
+        showToast('Mode Anak aktif · Masukkan PIN orang tua untuk membuka Pengaturan');
+        return;
+      }
       setHaramainOpen(false);
       setGameOpen(false);
       setMapsOpen(false);
@@ -692,6 +745,11 @@ export default function App() {
       setScreenSaverActive(false);
       if (powerState !== 'awake') {
         setPowerState('awake');
+      }
+      if (isKidsMode) {
+        setKidsUnlockOpen(true);
+        showToast('Mode Anak aktif · Akses Power Menu dinonaktifkan');
+        return;
       }
       setHaramainOpen(false);
       setGameOpen(false);
@@ -714,6 +772,8 @@ export default function App() {
       delete window.__tvRefreshApps;
     };
   }, [
+    isKidsMode,
+    kidsUnlockOpen,
     screenSaverActive,
     haramainOpen,
     gameOpen,
@@ -728,6 +788,7 @@ export default function App() {
     settingsOpen,
     appSearchQuery,
     loadAndroidApps,
+    showToast,
   ]);
 
   // Wake from Sleep standby on any remote/keyboard press
@@ -838,6 +899,7 @@ export default function App() {
     enabled:
       !mobileSyncSession &&
       !screenSaverActive &&
+      !kidsUnlockOpen &&
       !settingsOpen &&
       !apkModalOpen &&
       !weeklyModalOpen &&
@@ -852,20 +914,43 @@ export default function App() {
     soundEnabled: settings.soundNav === '1' && !dndSession,
     dpadSpeed: settings.dpadSpeed,
     onBack: () => {
+      if (isKidsMode) return;
       if (appSearchQuery) {
         setAppSearchQuery('');
       } else if (favoriteEditMode) {
         setFavoriteEditMode(false);
       }
     },
-    onMenu: () => setSettingsOpen(true),
-    onMenuHold: () => setPowerMenuOpen(true),
+    onMenu: () => {
+      if (isKidsMode) {
+        setKidsUnlockOpen(true);
+        showToast('Mode Anak aktif · Masukkan PIN orang tua untuk Pengaturan');
+      } else {
+        setSettingsOpen(true);
+      }
+    },
+    onMenuHold: () => {
+      if (isKidsMode) {
+        setKidsUnlockOpen(true);
+        showToast('Mode Anak aktif · Akses Power Menu dinonaktifkan');
+      } else {
+        setPowerMenuOpen(true);
+      }
+    },
   });
 
   const timeParts = useMemo(() => getTimeParts(settings.tz, now), [settings.tz, now]);
   const activeThemePhase = resolveTimeTheme(timeParts.hour, settings.themeMode);
-  const themePalette = TIME_THEME_PALETTES[activeThemePhase];
+  const themePalette = useMemo(
+    () => resolveEffectivePalette(activeThemePhase, settings.accentColor),
+    [activeThemePhase, settings.accentColor]
+  );
+  const quickShortcut = useMemo(
+    () => normalizeQuickShortcut(settings.quickShortcut),
+    [settings.quickShortcut]
+  );
   const anyModalOpen =
+    kidsUnlockOpen ||
     settingsOpen ||
     apkModalOpen ||
     weeklyModalOpen ||
@@ -1067,9 +1152,26 @@ export default function App() {
     [showToast]
   );
 
+  const kidsAppSet = useMemo(
+    () => new Set(settings.kidsApps || []),
+    [settings.kidsApps]
+  );
+
+  const kidsAndroidApps = useMemo(
+    () => sortedAndroidApps.filter((app) => kidsAppSet.has(app.p)),
+    [sortedAndroidApps, kidsAppSet]
+  );
+
+  const kidsBrowserShortcuts = useMemo(
+    () => sortedBrowserShortcuts.filter((item) => kidsAppSet.has(item.url)),
+    [sortedBrowserShortcuts, kidsAppSet]
+  );
+
   useEffect(() => {
     if (
       mobileSyncSession ||
+      isKidsMode ||
+      kidsUnlockOpen ||
       settingsOpen ||
       apkModalOpen ||
       weeklyModalOpen ||
@@ -1097,6 +1199,8 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [
     mobileSyncSession,
+    isKidsMode,
+    kidsUnlockOpen,
     settingsOpen,
     apkModalOpen,
     weeklyModalOpen,
@@ -1128,6 +1232,85 @@ export default function App() {
     saveSettings(next);
     showToast('Pengaturan disimpan');
   };
+
+  const handleQuickShortcut = useCallback(async () => {
+    const action = quickShortcut.action;
+    if (action === 'clear-cache') {
+      if (quickShortcutBusy) return;
+      setQuickShortcutBusy(true);
+      try {
+        const res = await clearLauncherRamCache();
+        showToast(`Cache RAM dibersihkan (${res.freedLabel})`);
+      } finally {
+        setQuickShortcutBusy(false);
+      }
+      return;
+    }
+
+    if (action === 'open-settings') {
+      setSettingsOpen(true);
+      return;
+    }
+
+    if (action === 'open-haramain') {
+      setHaramainInitialCity('makkah');
+      setHaramainOpen(true);
+      return;
+    }
+
+    if (action === 'toggle-dnd') {
+      if (dndSession) {
+        deactivateDndSession({
+          markDismissed: true,
+          toastMessage: 'Mode Hening dimatikan via Pintasan Cepat',
+        });
+      } else {
+        activateDndSession(
+          `quick-${Date.now()}`,
+          'Pintasan Cepat',
+          (settings.autoSilentDurationMin || 15) * 60 * 1000,
+          true
+        );
+      }
+      return;
+    }
+
+    if (action === 'open-favorite') {
+      const targetId = quickShortcut.targetAppId || settings.favoriteApps?.[0];
+      if (isAndroidEnv) {
+        const targetApp =
+          sortedAndroidApps.find((a) => a.p === targetId) || sortedAndroidApps[0];
+        if (targetApp) {
+          showToast(`Membuka ${targetApp.n}…`);
+          window.Android?.launch(targetApp.p);
+        } else {
+          showToast('Belum ada aplikasi terpasang untuk dibuka');
+        }
+        return;
+      }
+
+      const targetShortcut =
+        sortedBrowserShortcuts.find((b) => b.url === targetId) || sortedBrowserShortcuts[0];
+      if (targetShortcut) {
+        showToast(`Membuka ${targetShortcut.name}…`);
+        window.location.assign(targetShortcut.url);
+      } else {
+        showToast('Atur aplikasi favorit di Pengaturan terlebih dahulu');
+      }
+    }
+  }, [
+    quickShortcut,
+    quickShortcutBusy,
+    dndSession,
+    deactivateDndSession,
+    activateDndSession,
+    settings.autoSilentDurationMin,
+    settings.favoriteApps,
+    isAndroidEnv,
+    sortedAndroidApps,
+    sortedBrowserShortcuts,
+    showToast,
+  ]);
 
   const handlePowerAction = useCallback(
     (action: PowerAction) => {
@@ -1313,6 +1496,7 @@ export default function App() {
 
   const activeBottomBroadcast = customChatBroadcast || emergencyBroadcast;
   const isEmergencyTickerVisible =
+    !isKidsMode &&
     !mobileSyncSession &&
     powerState === 'awake' &&
     (Boolean(customChatBroadcast) ||
@@ -1347,15 +1531,22 @@ export default function App() {
       id="tv-launcher-root"
       data-tv-theme={activeThemePhase}
       className="relative flex min-h-screen w-full flex-col overflow-x-hidden bg-[#070d19] text-slate-100 transition-colors duration-700 lg:h-screen lg:overflow-hidden"
-      style={
-        wallpaper
+      style={{
+        ...(themePalette.focusHex
+          ? ({
+              '--tv-focus-hex': themePalette.focusHex,
+              '--tv-focus-rgb': themePalette.focusRgb,
+              '--tv-focus-input-bg': themePalette.focusInputBg,
+            } as React.CSSProperties)
+          : {}),
+        ...(wallpaper
           ? {
               backgroundImage: `url(${wallpaper})`,
               backgroundSize: 'cover',
               backgroundPosition: 'center',
             }
-          : undefined
-      }
+          : {}),
+      }}
     >
       {/* Cross-fading Time-of-Day Theme Gradient Layers */}
       {!wallpaper &&
@@ -1419,6 +1610,159 @@ export default function App() {
       )}
 
       {/* Safe-Zone 10-Foot TV Container */}
+      {isKidsMode ? (
+        <div
+          className={`relative z-10 flex flex-1 flex-col justify-between gap-6 px-6 py-6 md:px-12 md:py-9 lg:min-h-0 ${
+            launcherFadeIn ? 'tv-fade-in-reveal' : ''
+          }`}
+        >
+          {/* Kid-Safe Header */}
+          <header className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <div className="flex items-baseline gap-2.5">
+                <span className="font-mono-tabular text-5xl font-light tracking-tight text-white md:text-7xl lg:leading-none">
+                  {formattedClock}
+                </span>
+                <span className="font-mono-tabular text-xl font-normal text-slate-400 md:text-2xl">
+                  {timeParts.second}
+                </span>
+              </div>
+              <p className="mt-1.5 flex flex-wrap items-center gap-x-2 text-sm font-medium text-slate-300 md:text-base">
+                <span>{formattedDate}</span>
+                <span className="text-slate-500" aria-hidden="true">
+                  ·
+                </span>
+                <span className="inline-flex items-center gap-1.5 text-emerald-300">
+                  <Baby className="h-4 w-4" />
+                  <span>Mode Anak Aktif</span>
+                </span>
+                <span className="text-slate-500" aria-hidden="true">
+                  ·
+                </span>
+                <span className="text-slate-400">Akses sistem &amp; pengaturan terkunci</span>
+              </p>
+            </div>
+
+            <button
+              type="button"
+              data-focusable="true"
+              data-dpad-row="top"
+              onClick={() => setKidsUnlockOpen(true)}
+              className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold whitespace-nowrap shrink-0 ${themePalette.tileClass}`}
+            >
+              <Lock className={`h-4 w-4 ${themePalette.accentTextClass}`} />
+              <span>Keluar Mode Anak</span>
+            </button>
+          </header>
+
+          {/* Locked Kids Apps Grid */}
+          <main className="flex flex-1 flex-col justify-center overflow-y-auto py-2 no-scrollbar">
+            <div className="mb-4 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2.5">
+                <ShieldCheck className="h-5 w-5 text-emerald-300" />
+                <h1 className="text-xl font-semibold tracking-tight text-white md:text-2xl">
+                  Aplikasi Anak
+                </h1>
+              </div>
+              <span className="font-mono-tabular text-xs font-medium text-slate-400 md:text-sm">
+                {(isAndroidEnv ? kidsAndroidApps.length : kidsBrowserShortcuts.length)} aplikasi tersedia
+              </span>
+            </div>
+
+            {(isAndroidEnv ? kidsAndroidApps.length === 0 : kidsBrowserShortcuts.length === 0) ? (
+              <div
+                className={`flex flex-col items-center justify-center gap-4 rounded-2xl border p-8 text-center backdrop-blur-sm ${themePalette.cardClass}`}
+              >
+                <Baby className="h-10 w-10 text-emerald-300" />
+                <div className="max-w-lg space-y-1.5">
+                  <h2 className="text-lg font-semibold text-white">
+                    Belum Ada Aplikasi Anak yang Dipilih
+                  </h2>
+                  <p className="text-sm text-slate-300">
+                    Buka kunci dengan PIN orang tua untuk menandai aplikasi yang boleh diakses anak melalui menu Pengaturan.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  data-focusable="true"
+                  data-dpad-row="apps"
+                  data-dpad-default="true"
+                  onClick={() => setKidsUnlockOpen(true)}
+                  className={`flex items-center gap-2 rounded-xl border px-5 py-3 text-sm font-semibold ${themePalette.primaryButtonClass}`}
+                >
+                  <Lock className="h-4 w-4" />
+                  <span>Buka Kunci Orang Tua (PIN)</span>
+                </button>
+              </div>
+            ) : (
+              <div
+                id="tv-kids-apps-grid"
+                aria-label="Daftar Aplikasi Anak"
+                className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4"
+              >
+                {isAndroidEnv
+                  ? kidsAndroidApps.map((app, index) => (
+                      <button
+                        key={app.p}
+                        type="button"
+                        data-focusable="true"
+                        data-dpad-row="apps"
+                        data-dpad-default={index === 0 ? 'true' : undefined}
+                        onClick={() => window.Android?.launch(app.p)}
+                        className={`flex items-center gap-4 rounded-2xl border p-5 text-left transition-transform ${themePalette.tileClass}`}
+                      >
+                        {app.i ? (
+                          <img
+                            src={`data:image/png;base64,${app.i}`}
+                            alt={app.n}
+                            className="h-12 w-12 shrink-0 rounded-xl object-contain"
+                          />
+                        ) : (
+                          <Tv className={`h-10 w-10 shrink-0 ${themePalette.accentTextClass}`} />
+                        )}
+                        <div className="min-w-0">
+                          <div className="truncate text-base font-semibold text-white md:text-lg">
+                            {app.n}
+                          </div>
+                          <div className="text-xs text-emerald-300/90">Aplikasi Anak</div>
+                        </div>
+                      </button>
+                    ))
+                  : kidsBrowserShortcuts.map((item, index) => (
+                      <a
+                        key={`${item.name}-${item.url}`}
+                        href={item.url}
+                        data-focusable="true"
+                        data-dpad-row="apps"
+                        data-dpad-default={index === 0 ? 'true' : undefined}
+                        className={`flex items-center gap-4 rounded-2xl border p-5 text-left transition-transform ${themePalette.tileClass}`}
+                      >
+                        <span
+                          className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/10 text-base font-bold ${themePalette.accentTextClass}`}
+                        >
+                          {item.name.slice(0, 2).toUpperCase()}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="truncate text-base font-semibold text-white md:text-lg">
+                            {item.name}
+                          </div>
+                          <div className="text-xs text-emerald-300/90">Aplikasi Anak</div>
+                        </div>
+                      </a>
+                    ))}
+              </div>
+            )}
+          </main>
+
+          {/* Quiet Kids Mode Footer */}
+          <footer className="flex flex-wrap items-center justify-between gap-3 px-1 text-xs text-slate-400">
+            <span>
+              Mode Anak Terkunci · Panah Arah pilih aplikasi · OK/Enter buka aplikasi
+            </span>
+            <span>Orang tua: klik &ldquo;Keluar Mode Anak&rdquo; atau tekan M untuk masukkan PIN</span>
+          </footer>
+        </div>
+      ) : (
       <div
         className={`relative z-10 flex flex-1 flex-col gap-5 px-6 py-5 md:px-10 md:py-7 lg:min-h-0 ${
           isEmergencyTickerVisible ? 'pb-16 lg:pb-14' : ''
@@ -1549,6 +1893,12 @@ export default function App() {
                 isAndroidEnv={isAndroidEnv}
                 onToast={showToast}
               />
+
+              <RemoteBatteryBadge
+                tileClass={themePalette.tileClass}
+                accentTextClass={themePalette.accentTextClass}
+                onToast={showToast}
+              />
             </div>
           </div>
         </header>
@@ -1605,8 +1955,31 @@ export default function App() {
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: -12, scale: 0.97 }}
                         transition={cardTransition}
+                        onFocusCapture={() => setFocusedCardId('prayer')}
+                        onBlurCapture={(e) => {
+                          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                            setFocusedCardId((prev) => (prev === 'prayer' ? null : prev));
+                          }
+                        }}
                         className={`tv-dashboard-card flex flex-col rounded-2xl border p-5 backdrop-blur-sm ${dashboardCardSpanClass} lg:min-h-0 ${themePalette.cardClass}`}
                       >
+                        {focusedCardId === 'prayer' && (
+                          <motion.span
+                            layoutId="tv-card-focus-spring"
+                            aria-hidden="true"
+                            transition={{
+                              type: 'spring',
+                              stiffness: 380,
+                              damping: 24,
+                              mass: 0.75,
+                            }}
+                            className="pointer-events-none absolute -inset-[1px] rounded-2xl border-2"
+                            style={{
+                              borderColor: 'var(--tv-focus-hex)',
+                              boxShadow: '0 0 24px -4px rgba(var(--tv-focus-rgb), 0.45)',
+                            }}
+                          />
+                        )}
             <div className="flex flex-wrap items-start justify-between gap-2 pb-2.5">
               <div>
                 <h2 className="tv-card-title flex items-center gap-2 text-sm font-semibold tracking-wide text-slate-300 transition-colors">
@@ -1689,15 +2062,7 @@ export default function App() {
                       : 'DND Off'}
                   </span>
                 </span>
-                <AudioVisualizer
-                  accentClass={
-                    activeThemePhase === 'dawn'
-                      ? 'bg-orange-400'
-                      : activeThemePhase === 'night'
-                      ? 'bg-violet-400'
-                      : 'bg-sky-400'
-                  }
-                />
+                <AudioVisualizer accentClass={themePalette.vizBarClass} />
               </div>
             </div>
 
@@ -1880,17 +2245,48 @@ export default function App() {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: -12, scale: 0.97 }}
                     transition={cardTransition}
+                    onFocusCapture={() => setFocusedCardId('schedule')}
+                    onBlurCapture={(e) => {
+                      if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                        setFocusedCardId((prev) => (prev === 'schedule' ? null : prev));
+                      }
+                    }}
                     className={`tv-dashboard-card flex flex-col rounded-2xl border p-5 backdrop-blur-sm ${dashboardCardSpanClass} lg:min-h-0 ${themePalette.cardClass}`}
                   >
+                    {focusedCardId === 'schedule' && (
+                      <motion.span
+                        layoutId="tv-card-focus-spring"
+                        aria-hidden="true"
+                        transition={{
+                          type: 'spring',
+                          stiffness: 380,
+                          damping: 24,
+                          mass: 0.75,
+                        }}
+                        className="pointer-events-none absolute -inset-[1px] rounded-2xl border-2"
+                        style={{
+                          borderColor: 'var(--tv-focus-hex)',
+                          boxShadow: '0 0 24px -4px rgba(var(--tv-focus-rgb), 0.45)',
+                        }}
+                      />
+                    )}
             <div className="flex flex-wrap items-start justify-between gap-2 pb-2.5">
               <div>
                 <h2 className="tv-card-title flex items-center gap-2 text-sm font-semibold tracking-wide text-slate-300 transition-colors">
                   <span aria-hidden="true" className="tv-card-focus-dot h-2 w-2 rounded-full" />
-                  <span>{card2Tab === 'matches' ? 'Jadwal Pertandingan' : 'Jadwal TV Nasional'}</span>
+                  <span>
+                    {card2Tab === 'matches'
+                      ? 'Jadwal Pertandingan'
+                      : card2Tab === 'history'
+                      ? 'Riwayat Pertandingan'
+                      : 'Jadwal TV Nasional'}
+                  </span>
                 </h2>
                 <p className="text-xs text-slate-400">
                   {card2Tab === 'matches'
                     ? activeLeagueName
+                    : card2Tab === 'history'
+                    ? `${activeLeagueName} · Skor akhir 24 jam terakhir`
                     : selectedTvChannelId === 'all'
                     ? `${(settings.favoriteTvChannels || []).length} channel favorit · WIB`
                     : `${
@@ -1916,6 +2312,23 @@ export default function App() {
                   }`}
                 >
                   Bola
+                </button>
+                <button
+                  type="button"
+                  data-focusable="true"
+                  data-dpad-row="cards"
+                  onClick={() => {
+                    setCard2Tab('history');
+                    setTvChannelPickerOpen(false);
+                  }}
+                  className={`flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-medium whitespace-nowrap shrink-0 ${
+                    card2Tab === 'history'
+                      ? themePalette.activeTabClass
+                      : 'border-slate-700/80 bg-slate-800/85 text-slate-300 hover:bg-slate-800'
+                  }`}
+                >
+                  <History className="h-3.5 w-3.5" />
+                  <span>Riwayat</span>
                 </button>
                 <button
                   type="button"
@@ -2003,6 +2416,100 @@ export default function App() {
                             {m.strTime ? '' : ' (jam belum pasti)'}
                             {m.strLeague ? ` · ${m.strLeague}` : ''}
                           </span>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </>
+            ) : card2Tab === 'history' ? (
+              <>
+                <div className="flex items-center justify-between gap-2 pb-2">
+                  <span className="text-xs text-slate-400">
+                    Hasil akhir 24 jam terakhir
+                  </span>
+                  <button
+                    type="button"
+                    data-focusable="true"
+                    data-dpad-row="cards"
+                    onClick={handleCycleLeague}
+                    className="flex items-center gap-1.5 rounded-lg border border-slate-700/80 bg-slate-800/90 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700 whitespace-nowrap shrink-0"
+                  >
+                    <Trophy className="h-3.5 w-3.5 text-amber-300" />
+                    <span>Ganti Liga</span>
+                  </button>
+                </div>
+
+                <div className="flex-1 divide-y divide-slate-800/80 overflow-y-auto px-1 py-1 no-scrollbar">
+                  {historyLoading ? (
+                    <div className="space-y-2.5 py-2">
+                      {[0, 1, 2, 3].map((idx) => (
+                        <div
+                          key={idx}
+                          className="h-14 animate-pulse rounded-xl bg-slate-800/70"
+                        />
+                      ))}
+                    </div>
+                  ) : recentMatchResults.length === 0 ? (
+                    <div className="py-6 text-sm text-slate-400">
+                      Belum ada pertandingan yang selesai dalam 24 jam terakhir.
+                    </div>
+                  ) : (
+                    recentMatchResults.slice(0, 8).map((m, idx) => {
+                      const dateIso =
+                        m.strTimestamp ||
+                        `${m.dateEvent}T${m.strTime || '12:00:00'}${m.strTime ? 'Z' : 'Z'}`;
+                      const d = new Date(dateIso);
+                      let finishedAt = m.dateEvent;
+                      try {
+                        finishedAt = new Intl.DateTimeFormat('id-ID', {
+                          timeZone: settings.tz,
+                          weekday: 'short',
+                          day: 'numeric',
+                          month: 'short',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          hour12: false,
+                        }).format(d);
+                      } catch {
+                        // keep fallback
+                      }
+                      const scoreLabel = `${m.intHomeScore ?? '-'} - ${m.intAwayScore ?? '-'}`;
+
+                      return (
+                        <button
+                          key={m.idEvent || `past-${m.strHomeTeam}-${idx}`}
+                          type="button"
+                          data-focusable="true"
+                          data-dpad-row="cards"
+                          onClick={() =>
+                            showToast(
+                              `Skor Akhir: ${m.strHomeTeam} ${scoreLabel} ${m.strAwayTeam}${
+                                m.strLeague ? ` · ${m.strLeague}` : ''
+                              }`
+                            )
+                          }
+                          className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-slate-800/60"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-sm font-medium text-slate-100 md:text-base">
+                              {m.strHomeTeam} vs {m.strAwayTeam}
+                            </div>
+                            <div className="mt-0.5 truncate font-mono-tabular text-xs text-slate-400">
+                              {finishedAt}
+                              {m.strLeague ? ` · ${m.strLeague}` : ''}
+                            </div>
+                          </div>
+                          <div className="flex shrink-0 flex-col items-end">
+                            <span
+                              className={`font-mono-tabular rounded-lg border border-slate-700/80 bg-slate-800/90 px-2.5 py-1 text-sm font-bold ${themePalette.accentTextClass}`}
+                            >
+                              {scoreLabel}
+                            </span>
+                            <span className="mt-0.5 text-[10px] font-semibold text-emerald-300">
+                              {m.strStatus || 'FT'}
+                            </span>
+                          </div>
                         </button>
                       );
                     })
@@ -2142,15 +2649,40 @@ export default function App() {
                         ) : (
                           <motion.div
                             key={selectedTvChannelId}
-                            initial={{ opacity: 0, y: 6 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -4 }}
-                            transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                            variants={{
+                              hidden: { opacity: 0 },
+                              show: {
+                                opacity: 1,
+                                transition: {
+                                  staggerChildren: 0.045,
+                                  delayChildren: 0.02,
+                                },
+                              },
+                              exit: {
+                                opacity: 0,
+                                transition: { duration: 0.14 },
+                              },
+                            }}
+                            initial="hidden"
+                            animate="show"
+                            exit="exit"
                             className="divide-y divide-slate-800/80"
                           >
                             {displayedTvPrograms.map((prog, idx) => (
-                              <button
+                              <motion.button
                                 key={`${prog.channelId}-${prog.time}-${idx}`}
+                                variants={{
+                                  hidden: { opacity: 0, y: 10, scale: 0.985 },
+                                  show: {
+                                    opacity: 1,
+                                    y: 0,
+                                    scale: 1,
+                                    transition: {
+                                      duration: 0.24,
+                                      ease: [0.16, 1, 0.3, 1],
+                                    },
+                                  },
+                                }}
                                 type="button"
                                 data-focusable="true"
                                 data-dpad-row="cards"
@@ -2181,7 +2713,7 @@ export default function App() {
                                     {prog.title}
                                   </div>
                                 </div>
-                              </button>
+                              </motion.button>
                             ))}
                           </motion.div>
                         )}
@@ -2203,8 +2735,31 @@ export default function App() {
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: -12, scale: 0.97 }}
                   transition={cardTransition}
+                  onFocusCapture={() => setFocusedCardId('weather')}
+                  onBlurCapture={(e) => {
+                    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                      setFocusedCardId((prev) => (prev === 'weather' ? null : prev));
+                    }
+                  }}
                   className={`tv-dashboard-card flex flex-col rounded-2xl border p-5 backdrop-blur-sm ${dashboardCardSpanClass} lg:min-h-0 ${themePalette.cardClass}`}
                 >
+                  {focusedCardId === 'weather' && (
+                    <motion.span
+                      layoutId="tv-card-focus-spring"
+                      aria-hidden="true"
+                      transition={{
+                        type: 'spring',
+                        stiffness: 380,
+                        damping: 24,
+                        mass: 0.75,
+                      }}
+                      className="pointer-events-none absolute -inset-[1px] rounded-2xl border-2"
+                      style={{
+                        borderColor: 'var(--tv-focus-hex)',
+                        boxShadow: '0 0 24px -4px rgba(var(--tv-focus-rgb), 0.45)',
+                      }}
+                    />
+                  )}
             <div className="flex items-center justify-between gap-2 pb-3">
               <div>
                 <h2 className="tv-card-title flex items-center gap-2 text-sm font-semibold tracking-wide text-slate-300 transition-colors">
@@ -2694,11 +3249,28 @@ export default function App() {
             accentTextClass={themePalette.accentTextClass}
           />
 
-          {/* Quiet TV Remote Legend */}
-          <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-xs text-slate-400">
-            <span>
-              Navigasi Remote: Panah Arah · OK/Enter Pilih · F Favorit · Back Kembali · M Menu · Tahan M Power Menu
-            </span>
+          {/* Bottom-Left Quick Shortcut + Quiet TV Remote Legend */}
+          <div className="flex flex-wrap items-center justify-between gap-3 px-1 text-xs text-slate-400">
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                data-focusable="true"
+                data-dpad-row="legend"
+                disabled={quickShortcutBusy}
+                onClick={handleQuickShortcut}
+                title="Tombol Pintasan Cepat (bisa dikustomisasi di Pengaturan)"
+                className={`flex items-center gap-2 rounded-xl border px-3.5 py-1.5 text-xs font-semibold whitespace-nowrap shrink-0 ${themePalette.primaryButtonClass} disabled:opacity-60`}
+              >
+                <Zap className={`h-3.5 w-3.5 ${themePalette.accentTextClass}`} />
+                <span>
+                  {quickShortcutBusy ? 'Membersihkan…' : quickShortcut.label}
+                </span>
+              </button>
+
+              <span>
+                Navigasi Remote: Panah Arah · OK/Enter Pilih · F Favorit · Back Kembali · M Menu · Tahan M Power Menu
+              </span>
+            </div>
             <span>
               {isAndroidEnv
                 ? `Android TV Box Bridge · ${androidApps.length} aplikasi terpasang`
@@ -2707,6 +3279,7 @@ export default function App() {
           </div>
         </footer>
       </div>
+      )}
 
       {/* Bottom-of-Screen Emergency AI Broadcast Running Text (Pesan Siaran) */}
       <EmergencyBroadcastTicker
@@ -2754,8 +3327,23 @@ export default function App() {
       )}
 
       {/* Modals */}
+      <KidsUnlockModal
+        isOpen={kidsUnlockOpen}
+        expectedPin={settings.kidsPin}
+        soundNav={settings.soundNav === '1' && !dndSession}
+        dpadSpeed={settings.dpadSpeed}
+        onUnlock={() => {
+          const next: LauncherSettings = { ...settings, kidsMode: '0' };
+          setSettings(next);
+          saveSettings(next);
+          setKidsUnlockOpen(false);
+          showToast('Mode Anak dinonaktifkan');
+        }}
+        onClose={() => setKidsUnlockOpen(false)}
+      />
+
       <SettingsModal
-        isOpen={settingsOpen}
+        isOpen={!isKidsMode && settingsOpen}
         settings={settings}
         androidApps={sortedAndroidApps}
         isAndroidEnv={isAndroidEnv}
@@ -2778,14 +3366,14 @@ export default function App() {
       />
 
       <ApkBuilderModal
-        isOpen={apkModalOpen}
+        isOpen={!isKidsMode && apkModalOpen}
         settings={settings}
         onClose={() => setApkModalOpen(false)}
         onToast={showToast}
       />
 
       <WeeklyPrayerModal
-        isOpen={weeklyModalOpen}
+        isOpen={!isKidsMode && weeklyModalOpen}
         cityName={settings.name}
         hijriDate={hijriDate}
         weekly={weeklyPrayers}
@@ -2797,7 +3385,7 @@ export default function App() {
       />
 
       <PowerMenuModal
-        isOpen={powerMenuOpen}
+        isOpen={!isKidsMode && powerMenuOpen}
         soundNav={settings.soundNav === '1' && !dndSession}
         dpadSpeed={settings.dpadSpeed}
         onAction={handlePowerAction}
@@ -2805,7 +3393,7 @@ export default function App() {
       />
 
       <QrSyncModal
-        isOpen={qrSyncOpen}
+        isOpen={!isKidsMode && qrSyncOpen}
         settings={settings}
         soundNav={settings.soundNav === '1' && !dndSession}
         onSyncReceived={handleQrSyncReceived}
@@ -2818,7 +3406,7 @@ export default function App() {
       />
 
       <MapsModal
-        isOpen={mapsOpen}
+        isOpen={!isKidsMode && mapsOpen}
         cityName={settings.name}
         cityLat={settings.lat}
         cityLon={settings.lon}
@@ -2840,7 +3428,7 @@ export default function App() {
       />
 
       <GeminiChatModal
-        isOpen={chatOpen}
+        isOpen={!isKidsMode && chatOpen}
         cityName={settings.name}
         weatherSummary={
           weather && currentWxDesc
@@ -2871,7 +3459,7 @@ export default function App() {
       />
 
       <MusicStudioModal
-        isOpen={musicOpen}
+        isOpen={!isKidsMode && musicOpen}
         soundNav={settings.soundNav === '1' && !dndSession}
         dpadSpeed={settings.dpadSpeed}
         onClose={() => setMusicOpen(false)}
@@ -2879,13 +3467,13 @@ export default function App() {
       />
 
       <OrbitSentinelGame
-        isOpen={gameOpen}
+        isOpen={!isKidsMode && gameOpen}
         initialMuted={settings.soundNav === '0' || Boolean(dndSession)}
         onExit={() => setGameOpen(false)}
       />
 
       <HaramainLiveModal
-        isOpen={haramainOpen}
+        isOpen={!isKidsMode && haramainOpen}
         initialCity={haramainInitialCity}
         soundNav={settings.soundNav === '1' && !dndSession}
         dpadSpeed={settings.dpadSpeed}

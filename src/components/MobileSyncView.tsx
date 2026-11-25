@@ -3,6 +3,7 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowUp,
+  Baby,
   BellOff,
   Check,
   Eye,
@@ -16,6 +17,7 @@ import {
   Tv,
 } from 'lucide-react';
 import {
+  ACCENT_COLOR_OPTIONS,
   AUTO_SILENT_DURATION_OPTIONS,
   DEFAULT_SETTINGS,
   DPAD_SPEED_OPTIONS,
@@ -23,16 +25,21 @@ import {
   LIVE_WALLPAPER_FILTERS,
   LIVE_WALLPAPER_THEMES,
   PRAYER_METHODS,
+  QUICK_SHORTCUT_ACTION_OPTIONS,
   THEME_MODE_OPTIONS,
   normalizeDashboardCards,
+  normalizeKidsPin,
+  normalizeQuickShortcut,
   searchCities,
 } from '../services/launcherApis';
 import type {
+  AccentColorPreset,
   DpadSpeed,
   GeoCityResult,
   LauncherSettings,
   LiveWallpaperFilter,
   LiveWallpaperTheme,
+  QuickShortcutAction,
   TimeThemeMode,
 } from '../types/launcher';
 
@@ -118,7 +125,13 @@ export const MobileSyncView: React.FC<MobileSyncViewProps> = ({
           'Content-Type': 'application/json',
           'x-sync-token': token,
         },
-        body: JSON.stringify({ token, settings: draft }),
+        body: JSON.stringify({
+          token,
+          settings: {
+            ...draft,
+            kidsPin: normalizeKidsPin(draft.kidsPin),
+          },
+        }),
       });
       if (!res.ok) {
         throw new Error('Gagal mengirim pengaturan ke TV.');
@@ -328,6 +341,29 @@ export const MobileSyncView: React.FC<MobileSyncViewProps> = ({
                 </select>
               </div>
 
+              <div className="space-y-1.5">
+                <label htmlFor="m-accent" className="block text-xs font-medium text-slate-300">
+                  Warna Aksen UI Global
+                </label>
+                <select
+                  id="m-accent"
+                  value={draft.accentColor || 'theme'}
+                  onChange={(e) =>
+                    setDraft((prev) => ({
+                      ...prev,
+                      accentColor: e.target.value as AccentColorPreset,
+                    }))
+                  }
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-sm text-white"
+                >
+                  {ACCENT_COLOR_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div className="flex items-center justify-between gap-2">
                 <span className="flex items-center gap-2 text-xs font-medium text-slate-300">
                   <Film className="h-4 w-4 text-sky-400" />
@@ -523,6 +559,82 @@ export const MobileSyncView: React.FC<MobileSyncViewProps> = ({
                     </option>
                   ))}
                 </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label htmlFor="m-quick-shortcut" className="block text-xs font-medium text-slate-300">
+                  Tombol Pintasan Cepat (Pojok Kiri Bawah)
+                </label>
+                <select
+                  id="m-quick-shortcut"
+                  value={normalizeQuickShortcut(draft.quickShortcut).action}
+                  onChange={(e) => {
+                    const nextAction = e.target.value as QuickShortcutAction;
+                    const defLabel =
+                      QUICK_SHORTCUT_ACTION_OPTIONS.find((o) => o.value === nextAction)
+                        ?.defaultLabel || 'Pintasan Cepat';
+                    setDraft((prev) => ({
+                      ...prev,
+                      quickShortcut: {
+                        ...normalizeQuickShortcut(prev.quickShortcut),
+                        action: nextAction,
+                        label: defLabel,
+                      },
+                    }));
+                  }}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-sm text-white"
+                >
+                  {QUICK_SHORTCUT_ACTION_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="m-kids-mode"
+                    className="flex items-center gap-1.5 text-xs font-medium text-slate-300"
+                  >
+                    <Baby className="h-3.5 w-3.5 text-emerald-300" />
+                    <span>Mode Anak</span>
+                  </label>
+                  <select
+                    id="m-kids-mode"
+                    value={draft.kidsMode === '1' ? '1' : '0'}
+                    onChange={(e) =>
+                      setDraft((prev) => ({
+                        ...prev,
+                        kidsMode: e.target.value === '1' ? '1' : '0',
+                      }))
+                    }
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+                  >
+                    <option value="0">Nonaktif</option>
+                    <option value="1">Aktif (Kunci TV)</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label htmlFor="m-kids-pin" className="block text-xs font-medium text-slate-300">
+                    PIN Orang Tua (4 Digit)
+                  </label>
+                  <input
+                    id="m-kids-pin"
+                    type="password"
+                    inputMode="numeric"
+                    maxLength={4}
+                    value={draft.kidsPin}
+                    onChange={(e) => {
+                      const digits = e.target.value.replace(/\D/g, '').slice(0, 4);
+                      setDraft((prev) => ({ ...prev, kidsPin: digits }));
+                    }}
+                    placeholder="1234"
+                    className="font-mono-tabular w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm tracking-widest text-white"
+                  />
+                </div>
               </div>
             </section>
 

@@ -29,10 +29,19 @@ interface SyncLauncherSettings {
   liveWallpaperTheme: 'clouds' | 'ocean' | 'aurora' | 'cosmos';
   liveWallpaperFilter: 'none' | 'monochrome' | 'sepia';
   themeMode: 'auto' | 'dawn' | 'day' | 'night';
+  accentColor: 'theme' | 'neon-green' | 'royal-blue' | 'amber-gold' | 'crimson' | 'violet';
   screenSaver: '1' | '0';
   autoSilent: '1' | '0';
   autoSilentDurationMin: number;
   dashboardCards: Array<{ id: 'prayer' | 'schedule' | 'weather'; visible: boolean }>;
+  quickShortcut: {
+    action: 'clear-cache' | 'open-favorite' | 'toggle-dnd' | 'open-settings' | 'open-haramain';
+    label: string;
+    targetAppId?: string;
+  };
+  kidsMode: '1' | '0';
+  kidsPin: string;
+  kidsApps: string[];
 }
 
 interface SyncSession {
@@ -122,6 +131,21 @@ function sanitizeSettings(raw: unknown): SyncLauncherSettings | null {
     modeRaw === 'dawn' || modeRaw === 'day' || modeRaw === 'night'
       ? modeRaw
       : 'auto';
+  const accentRaw = obj.accentColor;
+  const accentColor:
+    | 'theme'
+    | 'neon-green'
+    | 'royal-blue'
+    | 'amber-gold'
+    | 'crimson'
+    | 'violet' =
+    accentRaw === 'neon-green' ||
+    accentRaw === 'royal-blue' ||
+    accentRaw === 'amber-gold' ||
+    accentRaw === 'crimson' ||
+    accentRaw === 'violet'
+      ? accentRaw
+      : 'theme';
   const speedRaw = obj.dpadSpeed;
   const dpadSpeed: 'slow' | 'normal' | 'fast' =
     speedRaw === 'slow' || speedRaw === 'fast' ? speedRaw : 'normal';
@@ -168,6 +192,39 @@ function sanitizeSettings(raw: unknown): SyncLauncherSettings | null {
     }
   }
 
+  const validShortcutActions = new Set([
+    'clear-cache',
+    'open-favorite',
+    'toggle-dnd',
+    'open-settings',
+    'open-haramain',
+  ]);
+  const rawQs =
+    obj.quickShortcut && typeof obj.quickShortcut === 'object'
+      ? (obj.quickShortcut as { action?: unknown; label?: unknown; targetAppId?: unknown })
+      : {};
+  const qsAction = validShortcutActions.has(String(rawQs.action))
+    ? (String(rawQs.action) as SyncLauncherSettings['quickShortcut']['action'])
+    : 'clear-cache';
+  const qsLabel =
+    typeof rawQs.label === 'string' && rawQs.label.trim()
+      ? rawQs.label.trim().slice(0, 32)
+      : 'Bersihkan Cache RAM';
+  const qsTarget =
+    typeof rawQs.targetAppId === 'string' && rawQs.targetAppId.trim()
+      ? rawQs.targetAppId.trim().slice(0, 200)
+      : undefined;
+
+  const kidsMode: '1' | '0' = obj.kidsMode === '1' ? '1' : '0';
+  const rawPin = typeof obj.kidsPin === 'string' ? obj.kidsPin.replace(/\D/g, '').slice(0, 4) : '';
+  const kidsPin = rawPin.length === 4 ? rawPin : '1234';
+  const kidsApps = Array.isArray(obj.kidsApps)
+    ? obj.kidsApps
+        .filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+        .slice(0, 60)
+        .map((x) => x.trim().slice(0, 200))
+    : [];
+
   return {
     name,
     lat: safeLat,
@@ -185,10 +242,19 @@ function sanitizeSettings(raw: unknown): SyncLauncherSettings | null {
     liveWallpaperTheme,
     liveWallpaperFilter,
     themeMode,
+    accentColor,
     screenSaver,
     autoSilent,
     autoSilentDurationMin,
     dashboardCards,
+    quickShortcut: {
+      action: qsAction,
+      label: qsLabel,
+      ...(qsTarget ? { targetAppId: qsTarget } : {}),
+    },
+    kidsMode,
+    kidsPin,
+    kidsApps,
   };
 }
 

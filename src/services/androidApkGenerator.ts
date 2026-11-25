@@ -23,6 +23,7 @@ function buildStandaloneHtml(settings: LauncherSettings, config: ApkBuildConfig)
   const safeLiveTheme = JSON.stringify(settings.liveWallpaperTheme || 'clouds');
   const safeLiveFilter = JSON.stringify(settings.liveWallpaperFilter || 'none');
   const safeThemeMode = JSON.stringify(settings.themeMode || 'auto');
+  const safeAccentColor = JSON.stringify(settings.accentColor || 'theme');
   const safeScreenSaver = JSON.stringify(settings.screenSaver === '0' ? '0' : '1');
   const safeAutoSilent = JSON.stringify(settings.autoSilent === '0' ? '0' : '1');
   const safeAutoSilentDur = Number(settings.autoSilentDurationMin) || 15;
@@ -32,6 +33,21 @@ function buildStandaloneHtml(settings: LauncherSettings, config: ApkBuildConfig)
       { id: 'schedule', visible: true },
       { id: 'weather', visible: true },
     ]
+  );
+  const safeQuickShortcut = JSON.stringify(
+    settings.quickShortcut || {
+      action: 'clear-cache',
+      label: 'Bersihkan Cache RAM',
+    }
+  );
+  const safeKidsMode = JSON.stringify(settings.kidsMode === '1' ? '1' : '0');
+  const safeKidsPin = JSON.stringify(
+    typeof settings.kidsPin === 'string' && /^\d{4}$/.test(settings.kidsPin)
+      ? settings.kidsPin
+      : '1234'
+  );
+  const safeKidsApps = JSON.stringify(
+    Array.isArray(settings.kidsApps) ? settings.kidsApps : []
   );
   const safeApps = JSON.stringify(settings.apps);
   const includeSys = config.includeSystemShortcuts ? 'true' : 'false';
@@ -105,6 +121,10 @@ body{
   0%{opacity:0;transform:translateY(18px) scale(.985)}
   100%{opacity:1;transform:translateY(0) scale(1)}
 }
+@keyframes tv-card-focus-pulse{
+  0%,100%{transform:translateY(-2px) scale(1);border-color:rgba(var(--tv-focus-rgb),.72);box-shadow:0 0 0 1px rgba(var(--tv-focus-rgb),.32),0 18px 36px -14px rgba(var(--tv-focus-rgb),.32)}
+  50%{transform:translateY(-3px) scale(1.02);border-color:rgba(var(--tv-focus-rgb),.98);box-shadow:0 0 0 2px rgba(var(--tv-focus-rgb),.52),0 22px 44px -12px rgba(var(--tv-focus-rgb),.48)}
+}
 .card{
   background:var(--tv-card-bg);
   border:1px solid var(--tv-card-border);
@@ -113,7 +133,12 @@ body{
   display:flex;
   flex-direction:column;
   min-height:0;
-  transition:background .7s ease,border-color .7s ease;
+  transition:background .7s ease,border-color .24s ease,transform .24s cubic-bezier(.34,1.56,.64,1),box-shadow .24s ease;
+}
+.card:focus-within{
+  border-color:rgba(var(--tv-focus-rgb),.88);
+  animation:tv-card-focus-pulse 3.8s ease-in-out infinite;
+  z-index:5;
 }
 .card.card-enter{animation:tv-card-enter .46s cubic-bezier(.16,1,.3,1) both}
 .card h2{
@@ -139,13 +164,19 @@ body{
 #prayViz span{width:3px;height:100%;border-radius:2px;background:rgba(148,163,184,.35);transform-origin:bottom;transform:scaleY(.16);transition:background-color .15s ease}
 #prayViz.nav span{background:var(--tv-accent)}
 #prayViz.adzan span{background:#34d399}
+@keyframes tv-list-reveal{
+  0%{opacity:0;transform:translateY(8px) scale(.985)}
+  100%{opacity:1;transform:translateY(0) scale(1)}
+}
 .match{
   padding:.9vh .7vw;
   border-bottom:1px solid rgba(255,255,255,.08);
   border-radius:.6vw;
   font-size:1.38vw;
 }
+.match.stagger{animation:tv-list-reveal .26s cubic-bezier(.16,1,.3,1) both}
 .match small{display:block;color:rgba(203,213,225,.68);font-size:1.05vw;margin-top:.3vh;font-variant-numeric:tabular-nums}
+.score-pill{display:inline-block;padding:.2vh .65vw;border-radius:.45vw;background:rgba(15,23,42,.85);border:1px solid var(--tv-card-border);color:var(--tv-accent);font-weight:700;font-variant-numeric:tabular-nums}
 .day{
   display:flex;justify-content:space-between;align-items:center;
   font-size:1.45vw;padding:.8vh .4vw;
@@ -173,7 +204,7 @@ button,.btn{
   display:inline-flex;
   align-items:center;
   gap:.65vw;
-  transition:transform .14s ease,background .14s ease,box-shadow .14s ease,border-color .7s ease;
+  transition:transform 260ms cubic-bezier(.34,1.56,.64,1),background .16s ease,box-shadow .18s ease,border-color .7s ease;
 }
 @keyframes tv-focus-outer-glow{
   0%,100%{box-shadow:0 0 0 6px rgba(var(--tv-focus-rgb),.18),0 0 18px 2px rgba(var(--tv-focus-rgb),.22)}
@@ -183,17 +214,29 @@ button,.btn{
   outline:3px solid var(--tv-focus-hex);
   outline-offset:2px;
   background:var(--tv-focus-bg);
-  transform:scale(1.04);
+  transform:translateY(-1px) scale(1.045);
   box-shadow:0 0 0 6px rgba(var(--tv-focus-rgb),.18);
-  animation:tv-focus-outer-glow 2.4s ease-in-out 3s infinite;
+  animation:tv-focus-outer-glow 2.4s ease-in-out .4s infinite;
   z-index:10;
 }
 .fav-star{color:#fbbf24;font-size:1.15em;line-height:1}
 .fav-star.off{color:rgba(148,163,184,.55)}
 .fav-tile{border-color:rgba(251,191,36,.55)}
-#favList{display:flex;flex-wrap:wrap;gap:.8vw}
+.kid-tile{border-color:rgba(52,211,153,.65);background:rgba(16,185,129,.18)}
+#favList,#kidsList{display:flex;flex-wrap:wrap;gap:.8vw}
+#apps.kids-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(20vw,1fr));gap:1.2vw;overflow:visible;padding:1vh 0}
+#apps.kids-grid>*{justify-content:flex-start;padding:2vh 1.6vw;font-size:1.6vw}
+#kidsBanner{display:none;font-size:1.2vw;color:#6ee7b7;font-weight:600;margin-top:.5vh}
+#kidsPinModal{position:fixed;inset:0;background:rgba(5,10,20,.94);display:flex;visibility:hidden;opacity:0;transform:scale(.97);pointer-events:none;align-items:center;justify-content:center;z-index:65;padding:4vw;transition:opacity .22s ease,transform .22s cubic-bezier(.16,1,.3,1),visibility 0s linear .22s}
+#kidsPinModal.on{visibility:visible;opacity:1;transform:scale(1);pointer-events:auto;transition:opacity .22s ease,transform .22s cubic-bezier(.16,1,.3,1),visibility 0s}
+.pin-box{width:min(44vw,460px);background:#0f172a;border:1px solid rgba(148,163,184,.3);border-radius:1.4vw;padding:2vw;text-align:center}
+.pin-dots{display:flex;justify-content:center;gap:1vw;margin:1.8vh 0}
+.pin-dot{width:3.2vw;height:3.2vw;min-width:42px;min-height:42px;border-radius:.7vw;border:1px solid rgba(148,163,184,.35);background:rgba(30,41,59,.8);display:flex;align-items:center;justify-content:center;font-size:1.8vw;font-weight:700}
+.pin-dot.on{border-color:var(--tv-focus-hex);background:rgba(var(--tv-focus-rgb),.22)}
+.pin-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:.8vw;margin-top:1.4vh}
+.pin-pad button{justify-content:center;padding:1.4vh .8vw;font-size:1.5vw;font-weight:600}
 #apps button img{width:2.6vw;height:2.6vw;border-radius:.45vw;object-fit:contain}
-.hint{font-size:1.05vw;color:rgba(148,163,184,.75);display:flex;justify-content:space-between;padding:0 .4vw}
+.hint{font-size:1.05vw;color:rgba(148,163,184,.75);display:flex;justify-content:space-between;align-items:center;gap:1vw;padding:0 .4vw}
 @keyframes tv-app-fade-in{
   0%{opacity:.72;transform:scale(.992)}
   100%{opacity:1;transform:scale(1)}
@@ -241,7 +284,7 @@ option{color:#000}
   body{overflow:auto}#app{height:auto}.grid,.grid.cols-2,.grid.cols-1,#cardLayoutGrid{grid-template-columns:1fr}
   #clock{font-size:16vw}#date,#nowW,.row,.match,.day,.card h2,#cd,button,.btn,.f,input,select,textarea,.muted{font-size:3.8vw}
   #nowW b{font-size:11vw}.match small{font-size:3vw}#set h1{font-size:6.5vw}
-  .pwr-box{width:92vw}.pwr-grid{grid-template-columns:1fr}
+  .pwr-box{width:92vw}.pwr-grid{grid-template-columns:1fr}.pin-box{width:92vw}
 }
 </style>
 </head>
@@ -253,11 +296,14 @@ option{color:#000}
     <div>
       <div id="clock">--:--</div>
       <div id="date">Memuat tanggal…</div>
+      <div id="kidsBanner">👶 Mode Anak Aktif · Akses sistem &amp; pengaturan terkunci</div>
     </div>
     <div class="top-right">
       <div id="nowW"></div>
-      <input id="appFilter" data-focusable="true" data-dpad-row="top" placeholder="Cari aplikasi…" style="min-width:16vw;padding:1vh 1.1vw;font-size:1.25vw">
+      <input id="appFilter" data-focusable="true" data-dpad-row="top" placeholder="Cari aplikasi…" style="min-width:15vw;padding:1vh 1.1vw;font-size:1.2vw">
       <button id="openTop" data-focusable="true" data-dpad-row="top">Pengaturan</button>
+      <button id="kidsExitBtn" data-focusable="true" data-dpad-row="top" style="display:none">🔒 Keluar Mode Anak</button>
+      <button id="remBat" data-focusable="true" data-dpad-row="top" style="font-size:1.15vw;padding:1vh 1.1vw">🔋 --%</button>
     </div>
   </div>
 
@@ -284,7 +330,13 @@ option{color:#000}
       <div class="scroll-body" id="pray"><div class="muted">Memuat…</div></div>
     </div>
     <div class="card" data-card-id="schedule">
-      <h2>Jadwal Pertandingan</h2>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:.6vw;margin-bottom:.8vh">
+        <h2 id="schedTitle" style="margin:0">Jadwal Pertandingan</h2>
+        <div style="display:flex;gap:.4vw">
+          <button id="tabMatch" data-focusable="true" data-dpad-row="cards" style="padding:.45vh .8vw;font-size:1vw">Bola</button>
+          <button id="tabHistory" data-focusable="true" data-dpad-row="cards" style="padding:.45vh .8vw;font-size:1vw">Riwayat</button>
+        </div>
+      </div>
       <div class="scroll-body" id="match"><div class="muted">Memuat…</div></div>
     </div>
     <div class="card" data-card-id="weather">
@@ -306,7 +358,10 @@ option{color:#000}
     <button id="newsNext" data-focusable="true" data-dpad-row="ticker" style="padding:.45vh .8vw;font-size:1.05vw">›</button>
   </div>
   <div class="hint">
-    <span>Navigasi Remote: Panah Arah · OK/Enter Pilih · F Favorit · Back Kembali · M Menu · Tahan Menu Power Menu</span>
+    <div style="display:flex;align-items:center;gap:1vw;flex-wrap:wrap">
+      <button id="quickBtn" data-focusable="true" data-dpad-row="legend" style="padding:.5vh 1vw;font-size:1.05vw;border-color:var(--tv-focus-hex);color:var(--tv-accent)">⚡ Bersihkan Cache RAM</button>
+      <span>Navigasi Remote: Panah Arah · OK/Enter Pilih · F Favorit · Back Kembali · M Menu · Tahan Menu Power Menu</span>
+    </div>
     <span id="androidBadge"></span>
   </div>
 </div>
@@ -344,7 +399,7 @@ option{color:#000}
 <div id="ssaver" role="dialog" aria-modal="true" aria-label="Screen Saver">
   <img id="ssImg" alt="Pemandangan" referrerpolicy="no-referrer">
   <div id="ssScrim"></div>
-  <div id="ssBar">
+    <div id="ssBar">
     <div>
       <div id="ssClock" style="font-size:6.5vw;font-weight:300;line-height:1;font-variant-numeric:tabular-nums">--:--</div>
       <div id="ssDate" style="font-size:1.3vw;color:rgba(226,232,240,.88);margin-top:.8vh"></div>
@@ -353,6 +408,33 @@ option{color:#000}
       <div id="ssTitle" style="font-size:1.3vw;font-weight:500;color:#f8fafc"></div>
       <div id="ssMeta" style="font-size:1.05vw;color:rgba(203,213,225,.8);margin-top:.4vh"></div>
       <div style="font-size:.95vw;color:rgba(148,163,184,.78);margin-top:.5vh">Tekan tombol apa saja untuk kembali</div>
+    </div>
+  </div>
+</div>
+
+<div id="kidsPinModal" role="dialog" aria-modal="true" aria-label="Keluar Mode Anak">
+  <div class="pin-box">
+    <h2 style="font-size:1.8vw;font-weight:600;margin-bottom:.5vh">🔒 Keluar Mode Anak</h2>
+    <div class="muted" id="kidsPinMsg">Masukkan 4 digit PIN orang tua</div>
+    <div class="pin-dots">
+      <div class="pin-dot" id="kpd0"></div>
+      <div class="pin-dot" id="kpd1"></div>
+      <div class="pin-dot" id="kpd2"></div>
+      <div class="pin-dot" id="kpd3"></div>
+    </div>
+    <div class="pin-pad">
+      <button type="button" data-focusable="true" data-kdigit="1">1</button>
+      <button type="button" data-focusable="true" data-kdigit="2">2</button>
+      <button type="button" data-focusable="true" data-kdigit="3">3</button>
+      <button type="button" data-focusable="true" data-kdigit="4">4</button>
+      <button type="button" data-focusable="true" data-kdigit="5">5</button>
+      <button type="button" data-focusable="true" data-kdigit="6">6</button>
+      <button type="button" data-focusable="true" data-kdigit="7">7</button>
+      <button type="button" data-focusable="true" data-kdigit="8">8</button>
+      <button type="button" data-focusable="true" data-kdigit="9">9</button>
+      <button type="button" data-focusable="true" id="kidsPinDel">Hapus</button>
+      <button type="button" data-focusable="true" data-kdigit="0">0</button>
+      <button type="button" data-focusable="true" id="kidsPinCancel">Batal</button>
     </div>
   </div>
 </div>
@@ -403,6 +485,27 @@ option{color:#000}
       <option value="day">Siang (Bright Blue)</option>
       <option value="night">Malam (Deep Purple / Midnight)</option>
     </select>
+  </div>
+  <div class="f"><label>Warna aksen UI global (border fokus &amp; ikon)</label>
+    <select id="accentColor" data-focusable="true">
+      <option value="theme">Bawaan Tema Waktu</option>
+      <option value="neon-green">Hijau Neon</option>
+      <option value="royal-blue">Biru Royal</option>
+      <option value="amber-gold">Emas Hangat</option>
+      <option value="crimson">Merah Koral</option>
+      <option value="violet">Ungu Elektrik</option>
+    </select>
+  </div>
+  <div class="f"><label>Tombol Pintasan Cepat (Pojok Kiri Bawah)</label>
+    <div style="display:flex;gap:1vw;align-items:center;flex-wrap:wrap">
+      <select id="quickAction" data-focusable="true">
+        <option value="clear-cache">Bersihkan Cache RAM</option>
+        <option value="open-favorite">Buka Aplikasi Favorit</option>
+        <option value="toggle-dnd">Aktif / Nonaktifkan Mode Hening (DND)</option>
+        <option value="open-settings">Buka Pengaturan Launcher</option>
+      </select>
+      <input id="quickLabel" data-focusable="true" placeholder="Label tombol cepat">
+    </div>
   </div>
   <div class="f"><label>Live Wallpaper (Video Ambient Minimalis)</label>
     <div style="display:flex;gap:1vw;align-items:center;flex-wrap:wrap">
@@ -458,6 +561,15 @@ option{color:#000}
       <option value="fast">Cepat (Scroll Kilat 65ms)</option>
     </select>
   </div>
+  <div class="f"><label>Mode Anak (Kids Mode — kunci layar TV hanya ke Aplikasi Anak)</label>
+    <div style="display:flex;gap:1vw;align-items:center;flex-wrap:wrap">
+      <select id="kidsMode" data-focusable="true"><option value="0">Nonaktif</option><option value="1">Aktif (Kunci Antarmuka TV)</option></select>
+      <input id="kidsPin" type="password" inputmode="numeric" maxlength="4" data-focusable="true" placeholder="PIN Orang Tua (4 digit, default 1234)">
+    </div>
+  </div>
+  <div class="f"><label>Pilih Aplikasi Anak (hanya aplikasi bertanda Anak yang tampil saat Mode Anak aktif)</label>
+    <div id="kidsList"></div>
+  </div>
   <div class="f"><label>Aplikasi Favorit (muncul di posisi paling depan pada baris aplikasi)</label>
     <div id="favList"></div>
   </div>
@@ -475,7 +587,7 @@ const $=id=>document.getElementById(id);
 const DEF={
   name:${safeName},lat:${settings.lat},lon:${settings.lon},tz:${safeTz},
   method:${safeMethod},league:${safeLeague},adzan:${safeAdzan},soundNav:${safeSoundNav},dpadSpeed:${safeDpadSpeed},
-  favoriteApps:${safeFavoriteApps},liveWallpaper:${safeLiveWallpaper},liveWallpaperTheme:${safeLiveTheme},liveWallpaperFilter:${safeLiveFilter},themeMode:${safeThemeMode},screenSaver:${safeScreenSaver},autoSilent:${safeAutoSilent},autoSilentDurationMin:${safeAutoSilentDur},dashboardCards:${safeDashboardCards},apps:${safeApps}
+  favoriteApps:${safeFavoriteApps},liveWallpaper:${safeLiveWallpaper},liveWallpaperTheme:${safeLiveTheme},liveWallpaperFilter:${safeLiveFilter},themeMode:${safeThemeMode},accentColor:${safeAccentColor},screenSaver:${safeScreenSaver},autoSilent:${safeAutoSilent},autoSilentDurationMin:${safeAutoSilentDur},dashboardCards:${safeDashboardCards},quickShortcut:${safeQuickShortcut},kidsMode:${safeKidsMode},kidsPin:${safeKidsPin},kidsApps:${safeKidsApps},apps:${safeApps}
 };
 const DEF_CARDS=[{id:'prayer',visible:true},{id:'schedule',visible:true},{id:'weather',visible:true}];
 const CARD_META={prayer:{t:'Sholat',d:'Jadwal adzan & hitung mundur'},schedule:{t:'Jadwal',d:'Pertandingan & jadwal TV'},weather:{t:'Cuaca',d:'Prakiraan cuaca & peringatan'}};
@@ -495,7 +607,12 @@ function normalizeDashboardCards(raw){
 let S=Object.assign({},DEF);
 try{Object.assign(S,JSON.parse(localStorage.getItem('tvl')||'{}'))}catch(e){}
 if(!Array.isArray(S.favoriteApps))S.favoriteApps=[];
+if(!Array.isArray(S.kidsApps))S.kidsApps=[];
+S.kidsMode=S.kidsMode==='1'?'1':'0';
+S.kidsPin=/^\\d{4}$/.test(String(S.kidsPin||''))?String(S.kidsPin):'1234';
 if(!['auto','dawn','day','night'].includes(S.themeMode))S.themeMode='auto';
+if(!['theme','neon-green','royal-blue','amber-gold','crimson','violet'].includes(S.accentColor))S.accentColor='theme';
+if(!S.quickShortcut||typeof S.quickShortcut!=='object')S.quickShortcut={action:'clear-cache',label:'Bersihkan Cache RAM'};
 if(!['none','monochrome','sepia'].includes(S.liveWallpaperFilter))S.liveWallpaperFilter='none';
 if(!['slow','normal','fast'].includes(S.dpadSpeed))S.dpadSpeed='normal';
 if(S.screenSaver!=='0')S.screenSaver='1';
@@ -567,6 +684,26 @@ const TH_SHADE={
   night:'linear-gradient(180deg,rgba(17,9,38,.54),rgba(5,3,18,.88))'
 };
 const TH_LBL={dawn:'Fajar',day:'Siang',night:'Malam'};
+const ACCENT_MAP={
+  'neon-green':{hex:'#4ade80',rgb:'74,222,128',bg:'rgba(20,83,45,.52)',next:'#16a34a'},
+  'royal-blue':{hex:'#60a5fa',rgb:'59,130,246',bg:'rgba(30,64,175,.52)',next:'#2563eb'},
+  'amber-gold':{hex:'#fbbf24',rgb:'251,191,36',bg:'rgba(120,53,15,.52)',next:'#d97706'},
+  'crimson':{hex:'#fb7185',rgb:'251,113,133',bg:'rgba(136,19,55,.52)',next:'#e11d48'},
+  'violet':{hex:'#c084fc',rgb:'192,132,252',bg:'rgba(88,28,135,.52)',next:'#7c3aed'}
+};
+function applyGlobalAccent(){
+  const root=document.documentElement;
+  const ac=ACCENT_MAP[S.accentColor];
+  if(ac){
+    root.style.setProperty('--tv-focus-hex',ac.hex);
+    root.style.setProperty('--tv-focus-rgb',ac.rgb);
+    root.style.setProperty('--tv-focus-bg',ac.bg);
+    root.style.setProperty('--tv-accent',ac.hex);
+    root.style.setProperty('--tv-next-bg',ac.next);
+  }else{
+    ['--tv-focus-hex','--tv-focus-rgb','--tv-focus-bg','--tv-accent','--tv-next-bg'].forEach(p=>root.style.removeProperty(p));
+  }
+}
 let CUR_THEME='';
 function resolveThemePhase(h){
   if(S.themeMode==='dawn'||S.themeMode==='day'||S.themeMode==='night')return S.themeMode;
@@ -590,6 +727,7 @@ function applyTimeTheme(h){
     setWP();
     if(hadTheme)triggerAppFadeIn();
   }
+  applyGlobalAccent();
   return ph;
 }
 function setWP(){try{const w=localStorage.getItem('tvwp');document.body.style.backgroundImage=w?'url('+w+')':(TH_BG[CUR_THEME||'day']||TH_BG.day)}catch(e){}}
@@ -697,13 +835,43 @@ async function loadWx(){let r=cache('wx2-'+S.lat+S.lon);
   const alertBar=topW?'<div style="border-top:1px solid rgba(251,191,36,.35);border-bottom:1px solid rgba(251,191,36,.35);padding:.6vh .4vw;margin-bottom:.6vh;font-size:1.1vw;font-weight:600;color:'+(topW.lv==='ext'?'#fda4af':'#fde68a')+'">⚠️ '+topW.txt+'</div>':'';
   $('wx').innerHTML=alertBar+rows}
 
-/* Bola */
-async function loadMatch(){const k='mt-'+S.league;let r=cache(k);
-  try{r=await j('https://www.thesportsdb.com/api/v1/json/3/eventsnextleague.php?id='+S.league);cache(k,r)}catch(e){}
-  const ev=r&&r.events;if(!ev||!ev.length){$('match').innerHTML='<div class="muted">Belum ada jadwal / tidak dapat memuat</div>';return}
-  $('match').innerHTML=ev.slice(0,6).map(e=>{const d=new Date(e.dateEvent+'T'+(e.strTime||'00:00:00')+(e.strTime?'Z':''));
+/* Bola & Riwayat 24 Jam */
+let SCHED_TAB='matches',UPCOMING_EV=[],PAST_EV=[];
+function renderMatchCard(){
+  if($('schedTitle'))$('schedTitle').textContent=SCHED_TAB==='history'?'Riwayat Pertandingan (24j)':'Jadwal Pertandingan';
+  if($('tabMatch'))$('tabMatch').style.borderColor=SCHED_TAB==='matches'?'var(--tv-focus-hex)':'var(--tv-card-border)';
+  if($('tabHistory'))$('tabHistory').style.borderColor=SCHED_TAB==='history'?'var(--tv-focus-hex)':'var(--tv-card-border)';
+  if(SCHED_TAB==='history'){
+    if(!PAST_EV.length){$('match').innerHTML='<div class="muted">Belum ada pertandingan selesai dalam 24 jam terakhir</div>';return}
+    $('match').innerHTML=PAST_EV.slice(0,8).map((e,idx)=>{
+      const d=new Date(e.strTimestamp||(e.dateEvent+'T'+(e.strTime||'12:00:00')+'Z'));
+      const t=new Intl.DateTimeFormat('id-ID',{timeZone:S.tz,weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:false}).format(d);
+      const sc=(e.intHomeScore??'-')+' - '+(e.intAwayScore??'-');
+      return '<div class="match stagger" style="display:flex;justify-content:space-between;align-items:center;gap:.8vw;animation-delay:'+(idx*45)+'ms" tabindex="0" data-focusable="true" data-dpad-row="cards"><div style="min-width:0;flex:1"><div>'+e.strHomeTeam+' vs '+e.strAwayTeam+'</div><small>'+t+' · '+(e.strLeague||'')+'</small></div><span class="score-pill">'+sc+'</span></div>';
+    }).join('');
+    return;
+  }
+  if(!UPCOMING_EV.length){$('match').innerHTML='<div class="muted">Belum ada jadwal / tidak dapat memuat</div>';return}
+  $('match').innerHTML=UPCOMING_EV.slice(0,6).map((e,idx)=>{const d=new Date(e.dateEvent+'T'+(e.strTime||'00:00:00')+(e.strTime?'Z':''));
     const t=new Intl.DateTimeFormat('id-ID',{timeZone:S.tz,weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:false}).format(d);
-    return '<div class="match" tabindex="0" data-focusable="true" data-dpad-row="cards">'+e.strHomeTeam+' vs '+e.strAwayTeam+'<small>'+t+(e.strTime?'':' (jam belum pasti)')+' · '+(e.strLeague||'')+'</small></div>'}).join('')}
+    return '<div class="match stagger" style="animation-delay:'+(idx*45)+'ms" tabindex="0" data-focusable="true" data-dpad-row="cards">'+e.strHomeTeam+' vs '+e.strAwayTeam+'<small>'+t+(e.strTime?'':' (jam belum pasti)')+' · '+(e.strLeague||'')+'</small></div>'}).join('');
+}
+if($('tabMatch'))$('tabMatch').onclick=()=>{SCHED_TAB='matches';renderMatchCard()};
+if($('tabHistory'))$('tabHistory').onclick=()=>{SCHED_TAB='history';renderMatchCard()};
+async function loadMatch(){
+  const k='mt-'+S.league,kp='mt-past-'+S.league;
+  let r=cache(k),rp=cache(kp);
+  try{r=await j('https://www.thesportsdb.com/api/v1/json/3/eventsnextleague.php?id='+S.league);cache(k,r)}catch(e){}
+  try{rp=await j('https://www.thesportsdb.com/api/v1/json/3/eventspastleague.php?id='+S.league);cache(kp,rp)}catch(e){}
+  UPCOMING_EV=(r&&r.events)||[];
+  const now=Date.now(),cutoff=now-26*3600*1000;
+  PAST_EV=((rp&&rp.events)||[]).filter(e=>{
+    if(e.intHomeScore==null||e.intAwayScore==null||e.intHomeScore==='')return false;
+    const ms=Date.parse(e.strTimestamp||(e.dateEvent+'T'+(e.strTime||'12:00:00')+'Z'));
+    return Number.isFinite(ms)&&ms>=cutoff&&ms<=now;
+  });
+  renderMatchCard();
+}
 
 /* Aplikasi & Favorit */
 function sortFav(list,getId,getName){
@@ -722,47 +890,75 @@ function toggleFav(id){
   save();renderApps();if($('set').classList.contains('on'))renderFavSettings();
 }
 let appFilterQ='';
+function toggleKidApp(id){
+  const i=S.kidsApps.indexOf(id);
+  if(i>=0)S.kidsApps.splice(i,1);else S.kidsApps.push(id);
+  save();renderApps();if($('set').classList.contains('on'))renderKidsSettings();
+}
+function applyKidsModeLayout(){
+  const kids=S.kidsMode==='1';
+  if($('tvGrid'))$('tvGrid').style.display=kids?'none':'grid';
+  if($('newsTicker'))$('newsTicker').style.display=kids?'none':'flex';
+  if($('quickBtn'))$('quickBtn').style.display=kids?'none':'inline-flex';
+  if($('appFilter'))$('appFilter').style.display=kids?'none':'block';
+  if($('openTop'))$('openTop').style.display=kids?'none':'inline-flex';
+  if($('nowW'))$('nowW').style.display=kids?'none':'block';
+  if($('kidsBanner'))$('kidsBanner').style.display=kids?'block':'none';
+  if($('kidsExitBtn'))$('kidsExitBtn').style.display=kids?'inline-flex':'none';
+  if($('apps'))$('apps').classList.toggle('kids-grid',kids);
+  if(kids)favEdit=false;
+}
 function renderApps(){
+  applyKidsModeLayout();
   let h='';
-  const q=appFilterQ.trim().toLowerCase();
+  const kids=S.kidsMode==='1';
+  const kidSet=new Set(S.kidsApps||[]);
+  const q=kids?'':appFilterQ.trim().toLowerCase();
   const favSet=new Set(S.favoriteApps||[]);
   if(window.Android){
-    $('androidBadge').textContent='Mode Android TV Aktif';
+    $('androidBadge').textContent=kids?'Mode Anak Terkunci':'Mode Android TV Aktif';
     try{
-      const apps=sortFav(JSON.parse(Android.getApps()),a=>a.p,a=>a.n).filter(a=>!q||a.n.toLowerCase().includes(q)||a.p.toLowerCase().includes(q));
-      if(!apps.length&&q){h+='<span class="muted" style="padding:0 1vw">Tidak ada aplikasi cocok</span>'}
+      let apps=sortFav(JSON.parse(Android.getApps()),a=>a.p,a=>a.n);
+      if(kids)apps=apps.filter(a=>kidSet.has(a.p));
+      else if(q)apps=apps.filter(a=>a.n.toLowerCase().includes(q)||a.p.toLowerCase().includes(q));
+      if(!apps.length){h+='<span class="muted" style="padding:0 1vw">'+(kids?'Belum ada Aplikasi Anak dipilih · Buka kunci orang tua untuk memilih':'Tidak ada aplikasi cocok')+'</span>'}
       apps.forEach(a=>{
-        const isFav=favSet.has(a.p);
-        const starHtml=(isFav||favEdit)?'<span class="fav-star '+(isFav?'':'off')+'">★</span>':'';
+        const isFav=!kids&&favSet.has(a.p);
+        const starHtml=(!kids&&(isFav||favEdit))?'<span class="fav-star '+(isFav?'':'off')+'">★</span>':'';
         h+='<button class="'+(isFav?'fav-tile':'')+'" data-p="'+a.p+'" data-fav-id="'+a.p+'" data-focusable="true" data-dpad-row="apps"><img src="data:image/png;base64,'+a.i+'" alt=""><span>'+a.n+'</span>'+starHtml+'</button>';
       });
     }catch(e){}
-    if(${includeSys}){
+    if(!kids&&${includeSys}){
       h+='<button data-s="wifi" data-focusable="true" data-dpad-row="apps">WiFi</button><button data-s="display" data-focusable="true" data-dpad-row="apps">Layar &amp; HDMI</button><button data-s="sound" data-focusable="true" data-dpad-row="apps">Suara</button>';
     }
   }else{
-    $('androidBadge').textContent='Mode Browser';
-    const items=sortFav(S.apps.split('\\n').filter(l=>l.includes('|')).map(l=>{const[n,u]=l.split('|');return{n:n.trim(),u:u.trim()}}),x=>x.u).filter(it=>!q||it.n.toLowerCase().includes(q));
-    if(!items.length&&q){h+='<span class="muted" style="padding:0 1vw">Tidak ada aplikasi cocok</span>'}
+    $('androidBadge').textContent=kids?'Mode Anak Terkunci':'Mode Browser';
+    let items=sortFav(S.apps.split('\\n').filter(l=>l.includes('|')).map(l=>{const[n,u]=l.split('|');return{n:n.trim(),u:u.trim()}}),x=>x.u);
+    if(kids)items=items.filter(it=>kidSet.has(it.u));
+    else if(q)items=items.filter(it=>it.n.toLowerCase().includes(q));
+    if(!items.length){h+='<span class="muted" style="padding:0 1vw">'+(kids?'Belum ada Aplikasi Anak dipilih · Buka kunci orang tua untuk memilih':'Tidak ada aplikasi cocok')+'</span>'}
     items.forEach(it=>{
-      const isFav=favSet.has(it.u);
-      const starHtml=(isFav||favEdit)?'<span class="fav-star '+(isFav?'':'off')+'">★</span>':'';
-      if(favEdit){
+      const isFav=!kids&&favSet.has(it.u);
+      const starHtml=(!kids&&(isFav||favEdit))?'<span class="fav-star '+(isFav?'':'off')+'">★</span>':'';
+      if(!kids&&favEdit){
         h+='<button class="'+(isFav?'fav-tile':'')+'" data-fav-toggle="'+it.u+'" data-fav-id="'+it.u+'" data-focusable="true" data-dpad-row="apps"><span>'+it.n+'</span>'+starHtml+'</button>';
       }else{
         h+='<a class="btn '+(isFav?'fav-tile':'')+'" data-fav-id="'+it.u+'" data-focusable="true" data-dpad-row="apps" href="'+it.u+'"><span>'+it.n+'</span>'+starHtml+'</a>';
       }
     });
   }
-  h+='<button id="favToggle" data-focusable="true" data-dpad-row="apps">'+(favEdit?'★ Selesai Favorit':'★ Atur Favorit')+'</button>';
-  h+='<button id="open" data-focusable="true" data-dpad-row="apps">Pengaturan</button>';
+  if(!kids){
+    h+='<button id="favToggle" data-focusable="true" data-dpad-row="apps">'+(favEdit?'★ Selesai Favorit':'★ Atur Favorit')+'</button>';
+    h+='<button id="open" data-focusable="true" data-dpad-row="apps">Pengaturan</button>';
+  }
   $('apps').innerHTML=h;
-  $('open').onclick=openSet;
-  $('openTop').onclick=openSet;
-  $('favToggle').onclick=()=>{favEdit=!favEdit;renderApps()};
-  document.querySelectorAll('#apps [data-p]').forEach(x=>x.onclick=()=>{if(favEdit)toggleFav(x.dataset.p);else Android.launch(x.dataset.p)});
-  document.querySelectorAll('#apps [data-fav-toggle]').forEach(x=>x.onclick=()=>toggleFav(x.dataset.favToggle));
-  document.querySelectorAll('#apps [data-s]').forEach(x=>x.onclick=()=>Android.openSys(x.dataset.s));
+  if($('open'))$('open').onclick=openSet;
+  if($('openTop'))$('openTop').onclick=openSet;
+  if($('kidsExitBtn'))$('kidsExitBtn').onclick=openKidsPinModal;
+  if($('favToggle'))$('favToggle').onclick=()=>{favEdit=!favEdit;renderApps()};
+  document.querySelectorAll('#apps [data-p]').forEach(x=>x.onclick=()=>{if(!kids&&favEdit)toggleFav(x.dataset.p);else Android.launch(x.dataset.p)});
+  document.querySelectorAll('#apps [data-fav-toggle]').forEach(x=>x.onclick=()=>{if(!kids)toggleFav(x.dataset.favToggle)});
+  document.querySelectorAll('#apps [data-s]').forEach(x=>x.onclick=()=>{if(!kids)Android.openSys(x.dataset.s)});
 }
 $('appFilter').oninput=e=>{appFilterQ=e.target.value;renderApps()};
 $('appFilter').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();const f=document.querySelector('#apps [data-fav-id]');f&&f.focus()}};
@@ -785,6 +981,27 @@ function renderFavSettings(){
     if(isFav)b.className='fav-tile';
     b.innerHTML='<span>'+it.n+'</span><span class="fav-star '+(isFav?'':'off')+'">★</span>';
     b.onclick=()=>toggleFav(it.id);
+    box.appendChild(b);
+  });
+}
+function renderKidsSettings(){
+  const box=$('kidsList');if(!box)return;
+  const kidSet=new Set(S.kidsApps||[]);
+  let items=[];
+  if(window.Android){
+    try{items=sortFav(JSON.parse(Android.getApps()),a=>a.p,a=>a.n).map(a=>({id:a.p,n:a.n}))}catch(e){}
+  }else{
+    items=S.apps.split('\\n').filter(l=>l.includes('|')).map(l=>{const[n,u]=l.split('|');return{id:u.trim(),n:n.trim()}});
+  }
+  if(!items.length){box.innerHTML='<span class="muted">Belum ada aplikasi</span>';return}
+  box.innerHTML='';
+  items.forEach(it=>{
+    const isKid=kidSet.has(it.id);
+    const b=document.createElement('button');
+    b.type='button';b.dataset.focusable='true';
+    if(isKid)b.className='kid-tile';
+    b.innerHTML='<span>'+it.n+'</span><span>'+(isKid?'👶 Anak':'○')+'</span>';
+    b.onclick=()=>toggleKidApp(it.id);
     box.appendChild(b);
   });
 }
@@ -912,20 +1129,65 @@ document.addEventListener('keydown',e=>{
   }
 },true);
 
-/* Pengaturan */
+/* Pengaturan & Mode Anak PIN */
+let kidsPinBuf='';
+function updateKidsPinDots(){
+  for(let i=0;i<4;i++){
+    const d=$('kpd'+i);if(!d)continue;
+    d.textContent=i<kidsPinBuf.length?'•':'';
+    d.classList.toggle('on',i<kidsPinBuf.length);
+  }
+}
+function openKidsPinModal(){
+  kidsPinBuf='';
+  if($('kidsPinMsg'))$('kidsPinMsg').textContent='Masukkan 4 digit PIN orang tua';
+  updateKidsPinDots();
+  $('kidsPinModal').classList.add('on');
+  setTimeout(()=>{const f=document.querySelector('#kidsPinModal [data-kdigit="1"]');f&&f.focus()},60);
+}
+function closeKidsPinModal(){
+  kidsPinBuf='';
+  $('kidsPinModal').classList.remove('on');
+  setTimeout(()=>{const f=document.querySelector('#apps [data-p],#apps a,#kidsExitBtn,#open');f&&f.focus()},60);
+}
+function pushKidsPinDigit(d){
+  if(kidsPinBuf.length>=4)return;
+  kidsPinBuf+=String(d);
+  updateKidsPinDots();
+  if(kidsPinBuf.length===4){
+    const target=/^\\d{4}$/.test(String(S.kidsPin||''))?String(S.kidsPin):'1234';
+    if(kidsPinBuf===target){
+      S.kidsMode='0';save();closeKidsPinModal();init();
+    }else{
+      if($('kidsPinMsg'))$('kidsPinMsg').textContent='PIN salah · Coba lagi';
+      setTimeout(()=>{kidsPinBuf='';updateKidsPinDots()},200);
+    }
+  }
+}
+document.querySelectorAll('#kidsPinModal [data-kdigit]').forEach(b=>b.onclick=()=>pushKidsPinDigit(b.dataset.kdigit));
+if($('kidsPinDel'))$('kidsPinDel').onclick=()=>{kidsPinBuf=kidsPinBuf.slice(0,-1);updateKidsPinDots()};
+if($('kidsPinCancel'))$('kidsPinCancel').onclick=closeKidsPinModal;
+
 function openSet(){
+  if(S.kidsMode==='1'){openKidsPinModal();return}
   $('locName').textContent=S.name+' ('+S.tz+')';
   $('method').value=S.method;$('league').value=S.league;
   $('adzan').value=S.adzan;$('autoSilent').value=S.autoSilent||'1';$('autoSilentDur').value=String(S.autoSilentDurationMin||15);
   $('soundNav').value=S.soundNav||'1';$('dpadSpeed').value=S.dpadSpeed||'normal';
   const dp=$('dndPermBtn');if(dp){dp.style.display=window.Android&&Android.requestDndPermission?'inline-flex':'none';dp.textContent=window.Android&&Android.hasDndAccess&&Android.hasDndAccess()?'Izin DND TV Aktif':'Beri Izin DND TV Box';dp.onclick=()=>{if(window.Android&&Android.requestDndPermission)Android.requestDndPermission()}}
   $('themeMode').value=S.themeMode||'auto';
+  $('accentColor').value=S.accentColor||'theme';
+  $('quickAction').value=(S.quickShortcut&&S.quickShortcut.action)||'clear-cache';
+  $('quickLabel').value=(S.quickShortcut&&S.quickShortcut.label)||'Bersihkan Cache RAM';
+  $('kidsMode').value=S.kidsMode==='1'?'1':'0';
+  $('kidsPin').value=S.kidsPin||'1234';
   $('liveWp').value=S.liveWallpaper||'0';$('liveTheme').value=S.liveWallpaperTheme||'clouds';$('liveFilter').value=S.liveWallpaperFilter||'none';
   $('screenSaver').value=S.screenSaver==='0'?'0':'1';
   $('appsTxt').value=S.apps;
   draftCards=normalizeDashboardCards(S.dashboardCards);
   grabbedCardId=null;
   renderCardLayoutSettings();
+  renderKidsSettings();
   renderFavSettings();
   $('set').classList.add('on');
   setTimeout(()=>$('q').focus(),60);
@@ -934,7 +1196,7 @@ function closeSet(){
   grabbedCardId=null;
   $('set').classList.remove('on');
   triggerAppFadeIn();
-  setTimeout(()=>{const f=document.querySelector('#apps [data-p],#apps a,#open');f&&f.focus()},60);
+  setTimeout(()=>{const f=document.querySelector('#apps [data-p],#apps a,#kidsExitBtn,#open');f&&f.focus()},60);
 }
 $('go').onclick=async()=>{
   const q=$('q').value.trim();if(!q)return;$('res').innerHTML='<span class="muted">Mencari…</span>';
@@ -951,11 +1213,12 @@ $('go').onclick=async()=>{
   }catch(e){$('res').innerHTML='<span class="muted">Gagal mencari</span>'}
 };
 $('q').onkeydown=e=>{if(e.key==='Enter')$('go').click()};
-$('save').onclick=()=>{S.method=$('method').value;S.league=$('league').value;S.adzan=$('adzan').value;S.autoSilent=$('autoSilent').value;S.autoSilentDurationMin=Number($('autoSilentDur').value)||15;S.soundNav=$('soundNav').value;S.dpadSpeed=$('dpadSpeed').value;S.themeMode=$('themeMode').value;S.liveWallpaper=$('liveWp').value;S.liveWallpaperTheme=$('liveTheme').value;S.liveWallpaperFilter=$('liveFilter').value;S.screenSaver=$('screenSaver').value;S.dashboardCards=normalizeDashboardCards(draftCards);S.apps=$('appsTxt').value;if(S.autoSilent==='0')endDndSession();save();closeSet();resetSsIdle();CUR_THEME='';init()};
+$('save').onclick=()=>{S.method=$('method').value;S.league=$('league').value;S.adzan=$('adzan').value;S.autoSilent=$('autoSilent').value;S.autoSilentDurationMin=Number($('autoSilentDur').value)||15;S.soundNav=$('soundNav').value;S.dpadSpeed=$('dpadSpeed').value;S.themeMode=$('themeMode').value;S.accentColor=$('accentColor').value;S.quickShortcut={action:$('quickAction').value,label:$('quickLabel').value.trim()||'Pintasan Cepat'};S.kidsMode=$('kidsMode').value==='1'?'1':'0';const kp=$('kidsPin').value.replace(/\\D/g,'').slice(0,4);S.kidsPin=kp.length===4?kp:'1234';S.liveWallpaper=$('liveWp').value;S.liveWallpaperTheme=$('liveTheme').value;S.liveWallpaperFilter=$('liveFilter').value;S.screenSaver=$('screenSaver').value;S.dashboardCards=normalizeDashboardCards(draftCards);S.apps=$('appsTxt').value;if(S.autoSilent==='0')endDndSession();save();closeSet();resetSsIdle();CUR_THEME='';init()};
 $('cancelSet').onclick=closeSet;
 
 let pwrTimer=null,pwrMode='awake';
 function openPowerMenu(){
+  if(S.kidsMode==='1'){openKidsPinModal();return}
   if($('set').classList.contains('on'))closeSet();
   $('pwr').classList.add('on');
   setTimeout(()=>{const b=document.querySelector('#pwr [data-pwr="sleep"]');b&&b.focus()},60);
@@ -1005,9 +1268,9 @@ $('pwrWake').onclick=wakePower;
 $('pwrState').onclick=()=>{if(pwrMode==='sleep')wakePower()};
 document.querySelectorAll('#pwr [data-pwr]').forEach(b=>b.onclick=()=>runPowerAction(b.dataset.pwr));
 
-window.__tvBack=()=>{if(ssOn){closeSs();return true}if($('pwr').classList.contains('on')){closePowerMenu();return true}if($('set').classList.contains('on')){closeSet();return true}if(favEdit){favEdit=false;renderApps();return true}return false};
-window.__tvMenu=()=>{if(ssOn)closeSs();if($('pwr').classList.contains('on'))closePowerMenu();if(!$('set').classList.contains('on'))openSet()};
-window.__tvPowerMenu=()=>{if(ssOn)closeSs();if(pwrMode!=='awake')wakePower();openPowerMenu()};
+window.__tvBack=()=>{if(ssOn){closeSs();return true}if($('kidsPinModal').classList.contains('on')){closeKidsPinModal();return true}if(S.kidsMode==='1')return false;if($('pwr').classList.contains('on')){closePowerMenu();return true}if($('set').classList.contains('on')){closeSet();return true}if(favEdit){favEdit=false;renderApps();return true}return false};
+window.__tvMenu=()=>{if(ssOn)closeSs();if(S.kidsMode==='1'){openKidsPinModal();return}if($('pwr').classList.contains('on'))closePowerMenu();if(!$('set').classList.contains('on'))openSet()};
+window.__tvPowerMenu=()=>{if(ssOn)closeSs();if(pwrMode!=='awake')wakePower();if(S.kidsMode==='1'){openKidsPinModal();return}openPowerMenu()};
 window.__tvRefreshApps=()=>{renderApps()};
 
 /* Screen Saver Galeri Pemandangan (5 Menit Tidak Aktif) */
@@ -1119,23 +1382,30 @@ document.addEventListener('keydown',e=>{
   if(pwrMode!=='awake')return;
   const pwrOn=$('pwr').classList.contains('on');
   const modalOn=$('set').classList.contains('on');
+  const pinOn=$('kidsPinModal').classList.contains('on');
   const active=document.activeElement;
   const tag=active?active.tagName:'';
   const isText=(tag==='INPUT'&&!['file','checkbox','button'].includes(active.type))||tag==='TEXTAREA';
 
+  if(pinOn){
+    if(/^[0-9]$/.test(e.key)){e.preventDefault();pushKidsPinDigit(e.key);return}
+    if(e.key==='Backspace'){e.preventDefault();kidsPinBuf=kidsPinBuf.slice(0,-1);updateKidsPinDots();return}
+  }
   if(e.key==='Escape'||(e.key==='Backspace'&&!isText)){
     clrHold();
-    if(pwrOn){e.preventDefault();closePowerMenu()}
+    if(pinOn){e.preventDefault();closeKidsPinModal()}
+    else if(pwrOn){e.preventDefault();closePowerMenu()}
     else if(modalOn){e.preventDefault();closeSet()}
     else if(favEdit){e.preventDefault();favEdit=false;renderApps()}
     return;
   }
-  if(!modalOn&&!pwrOn&&e.key.toLowerCase()==='f'&&!isText&&active&&active.dataset.favId){
+  if(!pinOn&&!modalOn&&!pwrOn&&S.kidsMode!=='1'&&e.key.toLowerCase()==='f'&&!isText&&active&&active.dataset.favId){
     e.preventDefault();toggleFav(active.dataset.favId);return;
   }
   if(e.key==='F1'||e.key==='ContextMenu'||(e.key.toLowerCase()==='m'&&!isText)){
     e.preventDefault();
-    if(modalOn||pwrOn)return;
+    if(pinOn||modalOn||pwrOn)return;
+    if(S.kidsMode==='1'){openKidsPinModal();return}
     const nk=e.key.toLowerCase();
     if(e.repeat||mHold.k===nk)return;
     clrHold();mHold.k=nk;mHold.done=false;
@@ -1150,7 +1420,7 @@ document.addEventListener('keydown',e=>{
     const pos=active.selectionStart||0,len=active.value.length;
     if((dir==='left'&&pos>0)||(dir==='right'&&pos<len))return;
   }
-  const root=pwrOn?$('pwr'):modalOn?$('set'):$('app');
+  const root=pinOn?$('kidsPinModal'):pwrOn?$('pwr'):modalOn?$('set'):$('app');
   const cands=[...root.querySelectorAll('[data-focusable="true"]:not([disabled])')].filter(el=>{
     const r=el.getBoundingClientRect();return r.width>0&&r.height>0;
   });
@@ -1277,8 +1547,56 @@ $('newsCat').onclick=()=>{NCAT=NCAT==='tech'?'sports':'tech';loadNews()};
 $('newsNext').onclick=()=>{if(NLIST.length){NIDX=(NIDX+1)%NLIST.length;renderNews()}};
 setInterval(()=>{if(NLIST.length>1){NIDX=(NIDX+1)%NLIST.length;renderNews()}},6000);
 
-function init(){setWP();applyDashboardCards();loadLiveWP();renderApps();loadPray();loadWx();loadMatch();loadNews();tick()}
-init();setInterval(tick,1000);setInterval(()=>{loadPray();loadWx();loadMatch();loadNews()},30*60*1000);
+/* Remote D-Pad Battery & Quick Shortcut */
+async function updateRemoteBattery(){
+  const btn=$('remBat');if(!btn)return;
+  let pct=null,label='Remote D-Pad';
+  if(window.Android&&Android.getRemoteBattery){
+    try{
+      const d=JSON.parse(Android.getRemoteBattery());
+      if(typeof d.level==='number'&&d.level>=0){pct=d.level;label=d.source||label}
+    }catch(e){}
+  }
+  if(pct===null&&navigator.getBattery){
+    try{
+      const b=await navigator.getBattery();
+      pct=Math.round((b.level||0)*100);
+      label=b.charging?'Daya (Mengisi)':'Baterai Perangkat';
+    }catch(e){}
+  }
+  btn.textContent=pct!==null?('🔋 '+pct+'%'):'🎮 Remote OK';
+  btn.title=label+(pct!==null?' · '+pct+'%':'');
+}
+function renderQuickShortcut(){
+  const btn=$('quickBtn');if(!btn)return;
+  const qs=S.quickShortcut||{action:'clear-cache',label:'Bersihkan Cache RAM'};
+  btn.textContent='⚡ '+(qs.label||'Pintasan Cepat');
+  btn.onclick=async()=>{
+    const act=qs.action||'clear-cache';
+    if(act==='clear-cache'){
+      const ks=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&/^(wx2-|pray|mt-|news-|livewp-|ssaver-)/.test(k))ks.push(k)}
+      ks.forEach(k=>localStorage.removeItem(k));
+      let extra='';
+      if(window.Android&&Android.clearAppCache){try{extra=Android.clearAppCache()}catch(e){}}
+      btn.textContent='✓ Cache Dibersihkan'+(extra?' ('+extra+')':'');
+      setTimeout(()=>renderQuickShortcut(),2400);
+    }else if(act==='open-favorite'){
+      const f=S.favoriteApps&&S.favoriteApps[0];
+      if(window.Android&&f)Android.launch(f);
+      else if(f)location.href=f;
+      else openSet();
+    }else if(act==='toggle-dnd'){
+      if(dndEndsAt)endDndSession(true);
+      else startDndSession('Pintasan',(Number(S.autoSilentDurationMin)||15)*60000);
+    }else{
+      openSet();
+    }
+  };
+}
+if($('remBat'))$('remBat').onclick=()=>updateRemoteBattery();
+
+function init(){setWP();applyDashboardCards();renderQuickShortcut();updateRemoteBattery();loadLiveWP();renderApps();loadPray();loadWx();loadMatch();loadNews();tick()}
+init();setInterval(tick,1000);setInterval(updateRemoteBattery,60000);setInterval(()=>{loadPray();loadWx();loadMatch();loadNews()},30*60*1000);
 setTimeout(()=>{const a=document.querySelector('#apps [data-p],#apps a,#open');a&&a.focus()},250);
 </script>
 </body>
@@ -1293,9 +1611,11 @@ export async function generateAndroidTvProjectZip(
   const pkgPath = config.packageId.replace(/\./g, '/');
   const safeAppName = escapeXml(config.appName);
 
-  // 1. settings.gradle.kts
+  const safeRootName = config.appName.replace(/[^a-zA-Z0-9_-]/g, '') || 'TVLauncher';
+
+  // 1. settings.gradle (Groovy)
   zip.file(
-    'settings.gradle.kts',
+    'settings.gradle',
     `pluginManagement {
     repositories {
         google()
@@ -1310,17 +1630,17 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "${config.appName.replace(/[^a-zA-Z0-9_-]/g, '') || 'TVLauncher'}"
-include(":app")
+rootProject.name = "${safeRootName}"
+include ':app'
 `
   );
 
-  // 2. Root build.gradle.kts
+  // 2. Root build.gradle (Groovy)
   zip.file(
-    'build.gradle.kts',
+    'build.gradle',
     `plugins {
-    id("com.android.application") version "8.5.2" apply false
-    id("org.jetbrains.kotlin.android") version "1.9.24" apply false
+    id 'com.android.application' version '8.5.2' apply false
+    id 'org.jetbrains.kotlin.android' version '1.9.24' apply false
 }
 `
   );
@@ -1335,7 +1655,7 @@ android.nonTransitiveRClass=true
 `
   );
 
-  // 4. gradle-wrapper.properties
+  // 4. gradle/wrapper/gradle-wrapper.properties
   zip.file(
     'gradle/wrapper/gradle-wrapper.properties',
     `distributionBase=GRADLE_USER_HOME
@@ -1346,50 +1666,101 @@ zipStorePath=wrapper/dists
 `
   );
 
-  // 5. app/build.gradle.kts
+  // 4b. gradlew (Unix wrapper script)
   zip.file(
-    'app/build.gradle.kts',
+    'gradlew',
+    `#!/bin/sh
+
+##############################################################################
+# Gradle start up script for POSIX generated by Gradle.
+##############################################################################
+
+APP_HOME=$( cd "\${APP_HOME:-./}" && pwd -P ) || exit
+DEFAULT_JVM_OPTS='"-Xmx64m" "-Xms64m"'
+APP_NAME="Gradle"
+APP_BASE_NAME=\${0##*/}
+
+warn ( ) {
+    echo "$*"
+} >&2
+
+die ( ) {
+    echo
+    echo "$*"
+    echo
+    exit 1
+} >&2
+
+CLASSPATH=$APP_HOME/gradle/wrapper/gradle-wrapper.jar
+
+if [ -n "$JAVA_HOME" ] ; then
+    if [ -x "$JAVA_HOME/jre/sh/java" ] ; then
+        JAVACMD=$JAVA_HOME/jre/sh/java
+    else
+        JAVACMD=$JAVA_HOME/bin/java
+    fi
+    if [ ! -x "$JAVACMD" ] ; then
+        die "ERROR: JAVA_HOME is set to an invalid directory: $JAVA_HOME"
+    fi
+else
+    JAVACMD=java
+    which java >/dev/null 2>&1 || die "ERROR: JAVA_HOME is not set and no 'java' command could be found in your PATH."
+fi
+
+if [ ! -f "$CLASSPATH" ]; then
+    if command -v gradle >/dev/null 2>&1; then
+        exec gradle "$@"
+    fi
+    die "ERROR: gradle-wrapper.jar not found at $CLASSPATH and system gradle is not installed."
+fi
+
+eval "set -- $DEFAULT_JVM_OPTS $JAVA_OPTS $GRADLE_OPTS \\"-Dorg.gradle.appname=$APP_BASE_NAME\\" -classpath \\"$CLASSPATH\\" org.gradle.wrapper.GradleWrapperMain \\"$@\\""
+exec "$JAVACMD" "$@"
+`,
+    { unixPermissions: '755' }
+  );
+
+  // 5. app/build.gradle (Groovy)
+  zip.file(
+    'app/build.gradle',
     `plugins {
-    id("com.android.application")
-    id("org.jetbrains.kotlin.android")
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
 }
 
 android {
-    namespace = "${config.packageId}"
-    compileSdk = 34
+    namespace '${config.packageId}'
+    compileSdk 34
 
     defaultConfig {
-        applicationId = "${config.packageId}"
-        minSdk = 21
-        targetSdk = 34
-        versionCode = ${config.versionCode}
-        versionName = "${config.versionName}"
+        applicationId "${config.packageId}"
+        minSdk 21
+        targetSdk 34
+        versionCode ${config.versionCode}
+        versionName "${config.versionName}"
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
     }
 
     kotlinOptions {
-        jvmTarget = "17"
+        jvmTarget = '17'
     }
 }
 
 dependencies {
-    implementation("androidx.core:core-ktx:1.13.1")
-    implementation("androidx.appcompat:appcompat:1.7.0")
-    implementation("androidx.webkit:webkit:1.11.0")
+    implementation 'androidx.core:core-ktx:1.13.1'
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'androidx.webkit:webkit:1.11.0'
 }
 `
   );
@@ -1463,15 +1834,19 @@ import android.annotation.SuppressLint
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.Drawable
+import android.hardware.input.InputManager
 import android.net.Uri
+import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.util.Base64
+import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.View
 import android.webkit.JavascriptInterface
@@ -1489,6 +1864,7 @@ import androidx.webkit.WebViewAssetLoader
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
+import java.io.File
 
 class MainActivity : AppCompatActivity() {
 
@@ -1742,6 +2118,88 @@ class MainActivity : AppCompatActivity() {
         }
 
         @JavascriptInterface
+        fun getRemoteBattery(): String {
+            var level = -1
+            var charging = false
+            var source = "Remote D-Pad"
+
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    val im = getSystemService(Context.INPUT_SERVICE) as? InputManager
+                    val ids = im?.inputDeviceIds ?: IntArray(0)
+                    for (id in ids) {
+                        val dev = im?.getInputDevice(id) ?: continue
+                        val hasDpad =
+                            (dev.sources and InputDevice.SOURCE_DPAD) == InputDevice.SOURCE_DPAD ||
+                            (dev.sources and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD ||
+                            (dev.sources and InputDevice.SOURCE_KEYBOARD) == InputDevice.SOURCE_KEYBOARD
+                        if (!hasDpad) continue
+                        val state = dev.batteryState
+                        if (state.isPresent && !state.remainingCapacity.isNaN()) {
+                            level = (state.remainingCapacity * 100f).toInt().coerceIn(0, 100)
+                            charging = state.status == BatteryManager.BATTERY_STATUS_CHARGING
+                            source = dev.name ?: "Remote Bluetooth"
+                            break
+                        }
+                    }
+                }
+            } catch (_: Exception) {
+            }
+
+            if (level < 0) {
+                try {
+                    val intent = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+                    val rawLevel = intent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+                    val scale = intent?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
+                    val status = intent?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
+                    if (rawLevel >= 0 && scale > 0) {
+                        level = ((rawLevel * 100f) / scale).toInt().coerceIn(0, 100)
+                        charging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
+                            status == BatteryManager.BATTERY_STATUS_FULL
+                        source = "Perangkat TV"
+                    }
+                } catch (_: Exception) {
+                }
+            }
+
+            return JSONObject().apply {
+                put("level", level)
+                put("charging", charging)
+                put("source", source)
+            }.toString()
+        }
+
+        @JavascriptInterface
+        fun clearAppCache(): String {
+            var freedBytes = 0L
+            fun deleteChildren(dir: File?): Long {
+                if (dir == null || !dir.exists()) return 0L
+                var bytes = 0L
+                dir.listFiles()?.forEach { child ->
+                    bytes += if (child.isDirectory) deleteChildren(child) else child.length()
+                    child.delete()
+                }
+                return bytes
+            }
+
+            try {
+                freedBytes += deleteChildren(cacheDir)
+                freedBytes += deleteChildren(externalCacheDir)
+                runOnUiThread {
+                    try {
+                        webView.clearCache(true)
+                    } catch (_: Exception) {
+                    }
+                }
+                System.gc()
+            } catch (_: Exception) {
+            }
+
+            val kb = maxOf(1L, freedBytes / 1024L)
+            return "\${kb} KB cache"
+        }
+
+        @JavascriptInterface
         fun powerAction(action: String) {
             runOnUiThread {
                 try {
@@ -1867,14 +2325,14 @@ class MainActivity : AppCompatActivity() {
   // 9. Bundled Web UI (app/src/main/assets/index.html)
   zip.file('app/src/main/assets/index.html', buildStandaloneHtml(currentSettings, config));
 
-  // 10. GitHub Actions CI workflow so user can build APK in the cloud in 2 mins!
+  // 10. GitHub Actions CI workflow so user can build APK automatically on push to main
   zip.file(
     '.github/workflows/build-apk.yml',
     `name: Build Android TV APK
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
@@ -1890,18 +2348,26 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Setup Gradle
+      - name: Setup Gradle (for Wrapper Bootstrap if jar missing)
+        if: \${{ hashFiles('gradle/wrapper/gradle-wrapper.jar') == '' }}
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
 
+      - name: Bootstrap Gradle Wrapper Jar if missing
+        if: \${{ hashFiles('gradle/wrapper/gradle-wrapper.jar') == '' }}
+        run: gradle wrapper --gradle-version 8.7
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
       - name: Build Debug APK
-        run: gradle assembleDebug --no-daemon
+        run: ./gradlew assembleDebug --no-daemon
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${config.appName.replace(/[^a-zA-Z0-9_-]/g, '') || 'TVLauncher'}-APK
+          name: ${safeRootName}-APK
           path: app/build/outputs/apk/debug/app-debug.apk
 `
   );
@@ -1914,15 +2380,16 @@ jobs:
 Proyek ini berisi kode sumber Android TV native (Kotlin + WebView + Leanback Launcher + D-Pad Remote Control) untuk **${config.appName}** (\`${config.packageId}\`).
 
 ## Opsi 1: Build APK Otomatis via GitHub Actions (Tanpa Install Android Studio)
-1. Upload seluruh isi folder ini ke repositori GitHub baru.
-2. Buka tab **Actions** di GitHub, lalu jalankan workflow **Build Android TV APK** (atau otomatis berjalan saat push).
-3. Tunggu ~2 menit hingga selesai, lalu unduh file **APK** dari bagian **Artifacts** di halaman workflow.
+1. Upload seluruh isi folder ini ke repositori GitHub baru pada branch \`main\`.
+2. Buka tab **Actions** di GitHub, workflow **Build Android TV APK** akan berjalan otomatis.
+3. Tunggu ~2 menit hingga selesai, lalu unduh file \`app-debug.apk\` dari bagian **Artifacts** di halaman workflow.
 
 ## Opsi 2: Build APK Lokal di PC via Android Studio / Gradle
 1. Ekstrak folder ini dan buka dengan **Android Studio** (atau pastikan Android SDK API 34 + JDK 17 terpasang).
 2. Jalankan di terminal:
    \`\`\`bash
-   gradle assembleDebug
+   chmod +x gradlew
+   ./gradlew assembleDebug
    \`\`\`
 3. File APK hasil build tersedia di:
    \`app/build/outputs/apk/debug/app-debug.apk\`
